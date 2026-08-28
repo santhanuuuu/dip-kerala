@@ -259,7 +259,4 @@ Full interactive docs available at `/docs` once the backend is running.
 
 ---
 
-## Credits
 
-Built by Santhanu, final-year CSE (Data Science), guided by Dr. Soumya Haridas, with
-Nanditha M Menon and Basil Binu.
