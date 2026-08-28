@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+@import 'leaflet/dist/leaflet.css';
+
+@theme inline {
+  --color-ink: #12262B;
+  --color-ink-light: #1a3540;
+  --color-backwater: #1F6F64;
+  --color-backwater-light: #2a8f82;
+  --color-laterite: #B54A2A;
+  --color-turmeric: #D99A2B;
+  --color-paddy: #7C9A3C;
+  --color-mist: #F2F4EF;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #F2F4EF;
+  color: #12262B;
+  font-family: 'IBM Plex Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+code, pre, .mono {
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #F2F4EF; }
+::-webkit-scrollbar-thumb { background: #1F6F64; border-radius: 2px; }
+
+.leaflet-container {
+  background: #e8ebe4 !important;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+@keyframes pulse-risk {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse-risk {
+  animation: pulse-risk 2s ease-in-out infinite;
+}

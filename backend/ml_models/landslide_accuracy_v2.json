@@ -1,0 +1,14 @@
+{
+  "model": "XGBoost",
+  "features": [
+    "elevation",
+    "slope",
+    "rainfall_7day_mm",
+    "vegetation",
+    "dist_to_water_m",
+    "soil_texture_class"
+  ],
+  "honest_grouped_accuracy_mean": 0.8525473682519634,
+  "honest_grouped_accuracy_std": 0.058406009268400345,
+  "label_source": "Hao et al. 2020 verified inventory (4728 points), spatial join, not district copy-paste"
+}

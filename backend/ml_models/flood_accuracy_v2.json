@@ -1,0 +1,16 @@
+{
+  "model": "LightGBM",
+  "features": [
+    "elevation",
+    "slope",
+    "rainfall_7day_mm",
+    "dist_to_water_m",
+    "vegetation",
+    "builtup",
+    "flow_accumulation"
+  ],
+  "random_split_accuracy": 0.8695652173913043,
+  "honest_grouped_accuracy_mean": 0.8730338771995168,
+  "honest_grouped_accuracy_std": 0.043207831987561604,
+  "label_source": "Sentinel-1 SAR flood extent (real per-unit), not district copy-paste"
+}

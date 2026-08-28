@@ -1,0 +1,6 @@
+{
+  "model": "RandomForest",
+  "random_split_accuracy": 0.7336683417085427,
+  "honest_grouped_accuracy_mean": 0.5083853430045848,
+  "honest_grouped_accuracy_std": 0.10544056946306289
+}
