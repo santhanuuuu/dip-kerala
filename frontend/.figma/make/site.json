@@ -1,7 +1,8 @@
 {
+  "title": "DIP Kerala — Disaster Intelligence Platform",
   "description": "Access real-time flood and landslide risk assessments for locations in Kerala, along with damage evaluations, enhancing disaster preparedness and response.",
   "robots": {
-    "index": false
+    "index": true
   },
   "accessibility": {
     "addBypassLinks": false,
