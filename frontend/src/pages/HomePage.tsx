@@ -20,18 +20,24 @@ export default function HomePage({ navigate }: HomePageProps) {
   const [alerts, setAlerts] = useState<ReturnType<typeof fetchRealAlerts> extends Promise<infer T> ? T : never>([]);
   const [districtNames, setDistrictNames] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [placesReady, setPlacesReady] = useState(false);
 
   useEffect(() => {
     fetchAllPlaces()
       .then((places) => {
         setAllPlaces(places);
         setDistrictNames([...new Set(places.map((p) => p.district))].sort());
+        setPlacesReady(true);
       })
       .catch((e) => setLoadError(e.message));
     fetchRealAlerts().then(setAlerts).catch(() => setAlerts([]));
   }, []);
 
   const handleSearch = () => {
+    if (!placesReady) return; // Guards against searching before the place list has loaded --
+    // the backend can take 30-60s to wake up on a cold start (free tier), and without this
+    // guard a search fired during that window silently filters an empty array and shows
+    // "not found" even for places that genuinely exist.
     if (!query.trim() && !district) return;
     setLoading(true);
     const filtered = allPlaces.filter((p) => {
@@ -127,20 +133,26 @@ export default function HomePage({ navigate }: HomePageProps) {
           </select>
           <button
             onClick={handleSearch}
-            disabled={loading}
+            disabled={loading || !placesReady}
             style={{
               padding: '12px 24px',
-              background: loading ? '#2a8f82' : '#1F6F64',
+              background: (loading || !placesReady) ? '#2a8f82' : '#1F6F64',
               border: 'none', borderRadius: 3,
-              cursor: loading ? 'wait' : 'pointer',
+              cursor: (loading || !placesReady) ? 'wait' : 'pointer',
               color: '#F2F4EF',
               fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 13,
               letterSpacing: '0.04em', transition: 'background 0.15s',
             }}
           >
-            {loading ? '…' : 'Query Risk'}
+            {loading ? '…' : !placesReady ? 'Loading…' : 'Query Risk'}
           </button>
         </div>
+
+        {!placesReady && !loadError && (
+          <div style={{ maxWidth: 900, margin: '12px auto 0', padding: '10px 16px', background: 'rgba(31,111,100,0.08)', border: '1px solid rgba(31,111,100,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64', textAlign: 'center' }}>
+            Loading place database — the backend can take up to a minute to wake up if it's been idle. Search will be enabled once it's ready.
+          </div>
+        )}
 
         {loadError && (
           <div style={{ maxWidth: 900, margin: '12px auto 0', padding: '10px 16px', background: 'rgba(181,74,42,0.08)', border: '1px solid rgba(181,74,42,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#B54A2A' }}>
