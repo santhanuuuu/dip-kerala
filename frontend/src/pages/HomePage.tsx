@@ -21,6 +21,8 @@ export default function HomePage({ navigate }: HomePageProps) {
   const [districtNames, setDistrictNames] = useState<string[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placesReady, setPlacesReady] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlightIndex, setHighlightIndex] = useState(-1);
 
   useEffect(() => {
     fetchAllPlaces()
@@ -48,6 +50,31 @@ export default function HomePage({ navigate }: HomePageProps) {
     setResults(filtered);
     setSearched(true);
     setLoading(false);
+    setShowSuggestions(false);
+  };
+
+  // Live suggestions -- recomputed on every keystroke while placesReady, ranked so
+  // names that START WITH the query float above names that merely CONTAIN it
+  // (e.g. typing "pira" should put "Piravom" above "Kizhakkambalam Pirathala").
+  const suggestions = (() => {
+    const q = query.trim().toLowerCase();
+    if (!placesReady || q.length === 0) return [];
+    const starts: Place[] = [];
+    const contains: Place[] = [];
+    for (const p of allPlaces) {
+      const name = p.name.toLowerCase();
+      if (name.startsWith(q)) starts.push(p);
+      else if (name.includes(q)) contains.push(p);
+      if (starts.length + contains.length >= 40) break; // cap the scan, we only show 8 anyway
+    }
+    return [...starts, ...contains].slice(0, 8);
+  })();
+
+  const selectSuggestion = (place: Place) => {
+    setQuery(place.name);
+    setShowSuggestions(false);
+    setHighlightIndex(-1);
+    navigate('manifest', place.id);
   };
 
   const typeLabel: Record<string, string> = {
@@ -95,19 +122,48 @@ export default function HomePage({ navigate }: HomePageProps) {
         </p>
 
         {/* Search box */}
+        <div style={{ position: 'relative', maxWidth: 680, margin: '0 auto 48px' }}>
         <div style={{
           background: '#ffffff',
           border: '1px solid rgba(18, 38, 43, 0.15)',
           borderRadius: 4, padding: 4,
           display: 'flex', gap: 4,
-          maxWidth: 680, margin: '0 auto 48px',
           boxShadow: '0 2px 8px rgba(18,38,43,0.06)',
         }}>
           <input
             type="text"
             value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            onChange={e => {
+              setQuery(e.target.value);
+              setShowSuggestions(true);
+              setHighlightIndex(-1);
+            }}
+            onFocus={() => query.trim() && setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            onKeyDown={e => {
+              if (showSuggestions && suggestions.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setHighlightIndex(i => Math.min(i + 1, suggestions.length - 1));
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setHighlightIndex(i => Math.max(i - 1, 0));
+                  return;
+                }
+                if (e.key === 'Enter' && highlightIndex >= 0) {
+                  e.preventDefault();
+                  selectSuggestion(suggestions[highlightIndex]);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  setShowSuggestions(false);
+                  return;
+                }
+              }
+              if (e.key === 'Enter') handleSearch();
+            }}
             placeholder="Search panchayat, municipality, city…"
             style={{
               flex: 1, background: 'none', border: 'none', outline: 'none',
@@ -146,6 +202,40 @@ export default function HomePage({ navigate }: HomePageProps) {
           >
             {loading ? '…' : !placesReady ? 'Loading…' : 'Query Risk'}
           </button>
+        </div>
+
+        {/* Live suggestions dropdown -- narrows as you type, like a search-engine autocomplete */}
+        {showSuggestions && suggestions.length > 0 && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4,
+            background: '#ffffff',
+            border: '1px solid rgba(18, 38, 43, 0.15)',
+            borderRadius: 4,
+            boxShadow: '0 8px 24px rgba(18,38,43,0.12)',
+            zIndex: 20, overflow: 'hidden',
+          }}>
+            {suggestions.map((p, i) => (
+              <button
+                key={p.id}
+                onMouseDown={e => e.preventDefault()} // keep input focus so onBlur doesn't fire first
+                onClick={() => selectSuggestion(p)}
+                onMouseEnter={() => setHighlightIndex(i)}
+                style={{
+                  display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 16px', textAlign: 'left', border: 'none', cursor: 'pointer',
+                  background: i === highlightIndex ? '#f5f7f3' : '#ffffff',
+                  borderBottom: i < suggestions.length - 1 ? '1px solid rgba(18,38,43,0.06)' : 'none',
+                }}
+              >
+                <span>
+                  <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 14, color: '#12262B' }}>{p.name}</span>
+                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginLeft: 8 }}>{typeLabel[p.type]}</span>
+                </span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED }}>{p.district}</span>
+              </button>
+            ))}
+          </div>
+        )}
         </div>
 
         {!placesReady && !loadError && (
