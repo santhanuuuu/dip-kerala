@@ -4,12 +4,13 @@ import HomePage from './pages/HomePage';
 import RiskManifestPage from './pages/RiskManifestPage';
 import DashboardPage from './pages/DashboardPage';
 import AlertsPage from './pages/AlertsPage';
+import NewsPage from './pages/NewsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import DamageAssessmentPage from './pages/DamageAssessmentPage';
 import SubmitPlacePage from './pages/SubmitPlacePage';
 import { loginWithGoogle, isLoggedIn as checkIsLoggedIn } from './lib/api';
 
-export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'analytics' | 'damage' | 'submit';
+export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'news' | 'analytics' | 'damage' | 'submit';
 
 function SectionDivider({ label }: { label: string }) {
   return (
@@ -55,6 +56,7 @@ export default function App() {
     manifest: useRef(null),
     dashboard: useRef(null),
     alerts: useRef(null),
+    news: useRef(null),
     analytics: useRef(null),
     damage: useRef(null),
     submit: useRef(null),
@@ -92,6 +94,11 @@ export default function App() {
       <SectionDivider label="ACTIVE ALERTS" />
       <div ref={refs.alerts} style={{ scrollMarginTop: 56 }}>
         <AlertsPage navigate={navigate} />
+      </div>
+
+      <SectionDivider label="NEWS" />
+      <div ref={refs.news} style={{ scrollMarginTop: 56 }}>
+        <NewsPage />
       </div>
 
       <SectionDivider label="ANALYTICS" />

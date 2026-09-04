@@ -10,6 +10,7 @@ const navItems: { page: Page; label: string; icon: string }[] = [
   { page: 'home', label: 'Search', icon: '◈' },
   { page: 'dashboard', label: 'GIS Map', icon: '⊞' },
   { page: 'alerts', label: 'Alerts', icon: '⚠' },
+  { page: 'news', label: 'News', icon: '▤' },
   { page: 'analytics', label: 'Analytics', icon: '▣' },
   { page: 'damage', label: 'Damage', icon: '◉' },
   { page: 'submit', label: 'Submit Place', icon: '+' },
