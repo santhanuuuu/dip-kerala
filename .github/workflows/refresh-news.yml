@@ -1,0 +1,19 @@
+name: Hourly news refresh
+
+# Pings the backend's news-refresh endpoint every hour. This exists because Render's
+# free tier spins the backend down after ~15 minutes of no traffic, which also pauses
+# the in-process hourly scheduler in backend/main.py -- this workflow guarantees the
+# refresh actually happens on schedule, and wakes the backend up as a side effect.
+on:
+  schedule:
+    - cron: '0 * * * *'  # every hour, on the hour (UTC)
+  workflow_dispatch: {}   # lets you manually trigger it from the Actions tab too
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger news cache refresh
+        run: |
+          curl -sf -X POST https://dip-kerala-backend.onrender.com/api/news/refresh \
+            || echo "Refresh request failed -- backend may be slow to wake up, this is non-fatal"

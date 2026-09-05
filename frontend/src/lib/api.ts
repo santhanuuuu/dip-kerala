@@ -126,7 +126,7 @@ export async function fetchRealAlerts(threshold = 0.7): Promise<Alert[]> {
 }
 
 // --- Submit a missing place ---
-export async function submitPlace(data: { name: string; place_type?: string; district?: string }) {
+export async function submitPlace(data: { name: string; place_type?: string; district?: string; local_body?: string; approx_lat?: number; approx_lon?: number }) {
   const res = await fetch(`${API_BASE}/api/places/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

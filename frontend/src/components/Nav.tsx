@@ -4,6 +4,7 @@ interface NavProps {
   navigate: (page: Page) => void;
   isLoggedIn: boolean;
   onLogin: () => void;
+  onLogout: () => void;
 }
 
 const navItems: { page: Page; label: string; icon: string }[] = [
@@ -16,7 +17,7 @@ const navItems: { page: Page; label: string; icon: string }[] = [
   { page: 'submit', label: 'Submit Place', icon: '+' },
 ];
 
-export default function Nav({ navigate, isLoggedIn, onLogin }: NavProps) {
+export default function Nav({ navigate, isLoggedIn, onLogin, onLogout }: NavProps) {
   return (
     <nav style={{
       position: 'fixed',
@@ -92,6 +93,31 @@ export default function Nav({ navigate, isLoggedIn, onLogin }: NavProps) {
               fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600,
             }}>KS</div>
             <span style={{ fontSize: 12, color: '#4a5e62', fontFamily: 'IBM Plex Mono, monospace' }}>signed in</span>
+            <button
+              onClick={onLogout}
+              style={{
+                padding: '4px 10px',
+                background: 'none',
+                border: '1px solid rgba(18,38,43,0.15)',
+                borderRadius: 3,
+                cursor: 'pointer',
+                color: '#4a5e62',
+                fontSize: 11,
+                fontFamily: 'IBM Plex Mono, monospace',
+                letterSpacing: '0.04em',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.color = '#B54A2A';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(181,74,42,0.35)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.color = '#4a5e62';
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(18,38,43,0.15)';
+              }}
+            >
+              Sign out
+            </button>
           </div>
         ) : (
           <button

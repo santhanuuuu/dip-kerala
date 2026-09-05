@@ -74,6 +74,7 @@ class PlaceSubmissionRequest(BaseModel):
     name: str
     place_type: Optional[str] = None
     district: Optional[str] = None
+    local_body: Optional[str] = None
     approx_lat: Optional[float] = None
     approx_lon: Optional[float] = None
 
@@ -90,6 +91,7 @@ def submit_place(
         name=submission.name,
         place_type=submission.place_type,
         district=submission.district,
+        local_body=submission.local_body,
         approx_lat=submission.approx_lat,
         approx_lon=submission.approx_lon,
         submitted_by=user.id,

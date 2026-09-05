@@ -8,7 +8,7 @@ import NewsPage from './pages/NewsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import DamageAssessmentPage from './pages/DamageAssessmentPage';
 import SubmitPlacePage from './pages/SubmitPlacePage';
-import { loginWithGoogle, isLoggedIn as checkIsLoggedIn } from './lib/api';
+import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn } from './lib/api';
 
 export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'news' | 'analytics' | 'damage' | 'submit';
 
@@ -75,6 +75,7 @@ export default function App() {
         navigate={navigate}
         isLoggedIn={isLoggedIn}
         onLogin={loginWithGoogle}
+        onLogout={logout}
       />
 
       <div ref={refs.home} style={{ scrollMarginTop: 56, paddingTop: 56 }}>

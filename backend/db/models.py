@@ -90,6 +90,11 @@ class PlaceSubmission(Base):
     name = Column(String, nullable=False)
     place_type = Column(String)
     district = Column(String)
+    # Captures the parent Panchayat/Municipality/Corporation for a sub-LSGD locality or
+    # village -- matches the "Local_Body" concept already used in the ward-level feature
+    # store (kerala_wards_all.csv). Optional: only relevant when the submission is a
+    # locality within an existing LSGD rather than an LSGD itself.
+    local_body = Column(String, nullable=True)
     approx_lat = Column(Float)
     approx_lon = Column(Float)
     submitted_by = Column(Integer, ForeignKey("users.id"), nullable=True)

@@ -17,7 +17,7 @@ const placeTypes = [
 const MUTED = '#4a5e62';
 
 export default function SubmitPlacePage({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const [form, setForm] = useState({ name: '', district: '', type: '', lat: '', lon: '', notes: '' });
+  const [form, setForm] = useState({ name: '', district: '', type: '', localBody: '', lat: '', lon: '', notes: '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -32,9 +32,10 @@ export default function SubmitPlacePage({ isLoggedIn }: { isLoggedIn: boolean })
         name: form.name,
         place_type: form.type || undefined,
         district: form.district || undefined,
+        local_body: form.localBody || undefined,
         approx_lat: form.lat ? parseFloat(form.lat) : undefined,
         approx_lon: form.lon ? parseFloat(form.lon) : undefined,
-      } as any);
+      });
       setSubmitted(true);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Submission failed.');
@@ -104,6 +105,10 @@ export default function SubmitPlacePage({ isLoggedIn }: { isLoggedIn: boolean })
                   {placeTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label style={labelStyle}>LOCAL AREA / VILLAGE (OPTIONAL)</label>
+              <input value={form.localBody} onChange={set('localBody')} placeholder="e.g. Kurumassery (if this is a locality within a larger panchayat/municipality)" style={inputStyle} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div>

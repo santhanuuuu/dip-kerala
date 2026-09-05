@@ -28,6 +28,7 @@ def list_pending_submissions(status: str = "pending", db: Session = Depends(get_
         "results": [
             {
                 "id": s.id, "name": s.name, "place_type": s.place_type, "district": s.district,
+                "local_body": s.local_body,
                 "approx_lat": s.approx_lat, "approx_lon": s.approx_lon,
                 "submitted_by": s.submitted_by, "created_at": s.created_at,
             }
