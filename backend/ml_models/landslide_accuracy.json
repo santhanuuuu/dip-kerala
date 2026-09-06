@@ -1,0 +1,6 @@
+{
+  "model": "XGBoost",
+  "random_split_accuracy": 0.7236180904522613,
+  "honest_grouped_accuracy_mean": 0.17728601216042386,
+  "honest_grouped_accuracy_std": 0.06893914538468014
+}

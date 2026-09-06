@@ -1,0 +1,6 @@
+{
+  "overall_accuracy": 0.6466666666666666,
+  "macro_f1": 0.5517020686375524,
+  "weighted_f1": 0.621850756915273,
+  "best_val_acc_during_training": 0.6466666666666666
+}
