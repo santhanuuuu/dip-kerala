@@ -354,7 +354,6 @@ export default function HomePage({ navigate }: HomePageProps) {
         <div style={{ maxWidth: 900, margin: '0 auto', padding: `0 ${isMobile ? 16 : 24}px 64px` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.1em' }}>DISASTER NEWS</span>
-            <button onClick={() => navigate('news')} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer' }}>VIEW ALL →</button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
             {news.slice(0, isMobile ? 3 : 6).map((article, i) => (
