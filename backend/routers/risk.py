@@ -145,7 +145,7 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 
 
 @router.get("/districts/ranking")
-def district_risk_ranking(limit_per_district: int = 5, db: Session = Depends(get_db)):
+def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get_db)):
     """REAL computed ranking, not sample/mock numbers -- scans a handful of places per
     district live, averages flood probability and landslide risk. Full responses are cached
     for 10 minutes; every number is genuinely computed from the trained models."""
@@ -154,11 +154,16 @@ def district_risk_ranking(limit_per_district: int = 5, db: Session = Depends(get
     if cached is not None:
         return cached
 
-    from sqlalchemy import func as sqlfunc
     districts = [row[0] for row in db.query(Place.district).distinct().all()]
     landslide_score_map = {"Low": 25, "Moderate": 50, "High": 75, "Critical": 100}
 
-    rankings = []
+    # Pull every district's sample places into plain dicts, then close the DB session
+    # BEFORE making any of the slow, sequential weather API calls below. Previously the
+    # session stayed open (holding a live transaction) across up to ~70 sequential HTTP
+    # calls that can each take several seconds with retries -- that repeatedly leaked
+    # long-held "idle in transaction" connections against the database. Extracting plain
+    # values upfront and releasing the connection immediately avoids that entirely.
+    district_places = {}
     for district in districts:
         places = (
             db.query(Place)
@@ -166,26 +171,40 @@ def district_risk_ranking(limit_per_district: int = 5, db: Session = Depends(get
             .limit(limit_per_district)
             .all()
         )
-        if not places:
-            continue
+        if places:
+            district_places[district] = [
+                {
+                    "lat": p.centroid_lat, "lon": p.centroid_lon,
+                    "elevation": p.elevation, "slope": p.slope,
+                    "dist_to_water_m": p.dist_to_water_m,
+                    "vegetation": p.vegetation, "builtup": p.builtup,
+                    "flow_accumulation": p.flow_accumulation,
+                    "soil_texture_class": p.soil_texture_class,
+                }
+                for p in places
+            ]
+    db.close()  # release the connection now -- nothing below touches the database again
+
+    rankings = []
+    for district, places in district_places.items():
         flood_scores, landslide_scores = [], []
         for place in places:
             try:
-                live_weather = weather.fetch_live_weather(place.centroid_lat, place.centroid_lon)
+                live_weather = weather.fetch_live_weather(place["lat"], place["lon"])
             except requests.RequestException:
                 continue
             flood_result = inference.predict_flood(
-                elevation=place.elevation, slope=place.slope,
+                elevation=place["elevation"], slope=place["slope"],
                 rainfall_7day_mm=live_weather["rainfall_7day_mm"],
-                dist_to_water_m=place.dist_to_water_m,
-                vegetation=place.vegetation, builtup=place.builtup,
-                flow_accumulation=place.flow_accumulation,
+                dist_to_water_m=place["dist_to_water_m"],
+                vegetation=place["vegetation"], builtup=place["builtup"],
+                flow_accumulation=place["flow_accumulation"],
             )
             landslide_result = inference.predict_landslide(
-                elevation=place.elevation, slope=place.slope,
+                elevation=place["elevation"], slope=place["slope"],
                 rainfall_7day_mm=live_weather["rainfall_7day_mm"],
-                vegetation=place.vegetation, dist_to_water_m=place.dist_to_water_m,
-                soil_texture_class=place.soil_texture_class,
+                vegetation=place["vegetation"], dist_to_water_m=place["dist_to_water_m"],
+                soil_texture_class=place["soil_texture_class"],
             )
             flood_scores.append(flood_result["probability"] * 100)
             landslide_scores.append(landslide_score_map.get(landslide_result["risk_level"], 50))

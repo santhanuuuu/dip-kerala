@@ -18,6 +18,7 @@ const navItems: { page: Page; label: string; icon: string }[] = [
   { page: 'dashboard', label: 'GIS Map', icon: '⊞' },
   { page: 'alerts', label: 'Alerts', icon: '⚠' },
   { page: 'analytics', label: 'Analytics', icon: '▣' },
+  { page: 'news', label: 'News', icon: '▤' },
   { page: 'damage', label: 'Damage', icon: '◉' },
   { page: 'submit', label: 'Submit Place', icon: '+' },
 ];

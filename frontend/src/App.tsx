@@ -5,12 +5,13 @@ import RiskManifestPage from './pages/RiskManifestPage';
 import DashboardPage from './pages/DashboardPage';
 import AlertsPage from './pages/AlertsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import NewsPage from './pages/NewsPage';
 import DamageAssessmentPage from './pages/DamageAssessmentPage';
 import SubmitPlacePage from './pages/SubmitPlacePage';
 import AdminReviewPage from './pages/AdminReviewPage';
 import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn, isAdmin as checkIsAdmin, adminLogout } from './lib/api';
 
-export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'analytics' | 'damage' | 'submit' | 'admin';
+export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'analytics' | 'news' | 'damage' | 'submit' | 'admin';
 
 function SectionDivider({ label }: { label: string }) {
   return (
@@ -59,6 +60,7 @@ export default function App() {
     dashboard: useRef(null),
     alerts: useRef(null),
     analytics: useRef(null),
+    news: useRef(null),
     damage: useRef(null),
     submit: useRef(null),
     admin: useRef(null),
@@ -110,6 +112,11 @@ export default function App() {
       <SectionDivider label="ANALYTICS" />
       <div ref={refs.analytics} style={{ scrollMarginTop: 56 }}>
         <AnalyticsPage />
+      </div>
+
+      <SectionDivider label="NEWS" />
+      <div ref={refs.news} style={{ scrollMarginTop: 56 }}>
+        <NewsPage />
       </div>
 
       <SectionDivider label="DAMAGE ASSESSMENT" />

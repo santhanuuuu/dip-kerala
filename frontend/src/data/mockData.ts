@@ -14,6 +14,7 @@ export interface Place {
   distToWaterM: number;
   vegetationPct: number;
   builtupPct: number;
+  terrainIsEstimated?: boolean;
 }
 
 export interface RiskResult {

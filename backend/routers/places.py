@@ -32,6 +32,7 @@ def list_all_places(db: Session = Depends(get_db)):
                 "distToWaterM": p.dist_to_water_m,
                 "vegetationPct": (p.vegetation or 0) * 100 if p.vegetation is not None and p.vegetation <= 1 else p.vegetation,
                 "builtupPct": (p.builtup or 0) * 100 if p.builtup is not None and p.builtup <= 1 else p.builtup,
+                "terrainIsEstimated": bool(p.terrain_is_estimated),
             }
             for p in places
         ]

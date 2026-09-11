@@ -38,6 +38,11 @@ class Place(Base):
     # inference service falls back to the v1 models for any place missing them.
     flow_accumulation = Column(Float, nullable=True)
     soil_texture_class = Column(Float, nullable=True)
+    # True when the terrain values above are a district-average estimate rather than a
+    # site-specific GEE extraction -- set automatically when an admin approves a new
+    # submission (see routers/admin.py). Surfaced honestly in the UI rather than presented
+    # as precise data.
+    terrain_is_estimated = Column(Boolean, default=False)
 
     is_verified = Column(Boolean, default=True)
     submitted_by = Column(Integer, ForeignKey("users.id"), nullable=True)

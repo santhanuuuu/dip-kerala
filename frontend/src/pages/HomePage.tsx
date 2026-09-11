@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { riskColor, type Place } from '../data/mockData';
-import { fetchAllPlaces, fetchRealAlerts, fetchNews } from '../lib/api';
+import { fetchAllPlaces, fetchRealAlerts } from '../lib/api';
 import { type Page } from '../App';
 import useIsMobile from '../hooks/useIsMobile';
 
@@ -30,7 +30,6 @@ export default function HomePage({ navigate }: HomePageProps) {
   const [placesReady, setPlacesReady] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
-  const [news, setNews] = useState<Array<{ title: string; description: string; url: string; image_url: string | null; source_name: string; published_at: string; is_kerala?: boolean }>>([]);
   const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
@@ -42,7 +41,6 @@ export default function HomePage({ navigate }: HomePageProps) {
       })
       .catch((e) => setLoadError(e.message));
     fetchRealAlerts().then(setAlerts).catch(() => setAlerts([]));
-    fetchNews().then((d) => setNews(d.results || [])).catch(() => setNews([]));
   }, [retryTick]);
 
   const handleSearch = () => {
@@ -344,55 +342,6 @@ export default function HomePage({ navigate }: HomePageProps) {
                   {new Date(alert.issuedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Disaster news preview -- backend caches this hourly from NewsAPI, see /api/news */}
-      {!searched && news.length > 0 && (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: `0 ${isMobile ? 16 : 24}px 64px` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.1em' }}>DISASTER NEWS</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-            {news.slice(0, isMobile ? 3 : 6).map((article, i) => (
-              <a
-                key={i}
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'block', textDecoration: 'none',
-                  background: '#ffffff',
-                  border: '1px solid rgba(18,38,43,0.08)',
-                  borderRadius: 2, overflow: 'hidden',
-                  transition: 'box-shadow 0.15s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(18,38,43,0.08)')}
-                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-              >
-                {article.image_url && (
-                  <div style={{ width: '100%', height: 140, background: `#e5e9e2 url(${article.image_url}) center/cover no-repeat` }} />
-                )}
-                <div style={{ padding: '14px 16px' }}>
-                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64', letterSpacing: '0.06em', marginBottom: 6, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {article.is_kerala && <span style={{ background: 'rgba(31,111,100,0.1)', padding: '1px 6px', borderRadius: 1 }}>KERALA</span>}
-                    {article.source_name}
-                  </div>
-                  <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 14, color: '#12262B', lineHeight: 1.35, marginBottom: 6 }}>
-                    {article.title}
-                  </div>
-                  {article.description && (
-                    <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 12, color: MUTED, lineHeight: 1.5, margin: 0 }}>
-                      {article.description.slice(0, 110)}…
-                    </p>
-                  )}
-                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, marginTop: 10 }}>
-                    {new Date(article.published_at).toLocaleDateString('en-IN', { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}
-                  </div>
-                </div>
-              </a>
             ))}
           </div>
         </div>

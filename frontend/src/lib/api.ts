@@ -70,6 +70,7 @@ export async function fetchAllPlaces(): Promise<Place[]> {
         distToWaterM: p.distToWaterM,
         vegetationPct: p.vegetationPct,
         builtupPct: p.builtupPct,
+        terrainIsEstimated: p.terrainIsEstimated,
       }));
       return placesCache!;
     } catch (e) {

@@ -238,6 +238,11 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
 
           <div style={{ ...CARD, padding: isMobile ? '18px 18px' : '20px 24px', boxShadow: '0 1px 6px rgba(18,38,43,0.05)' }}>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 12 }}>TERRAIN FEATURES</div>
+            {place.terrainIsEstimated && (
+              <div style={{ marginBottom: 12, padding: '6px 10px', background: 'rgba(217,154,43,0.08)', border: '1px solid rgba(217,154,43,0.25)', borderRadius: 2, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: '#D99A2B', lineHeight: 1.4 }}>
+                Estimated from the {place.district} district average — not a site-specific measurement.
+              </div>
+            )}
             <TerrainRow label="Elevation" value={`${place.elevation.toFixed(0)} m ASL`} />
             <TerrainRow label="Avg. Slope" value={`${place.slope.toFixed(1)}°`} />
             <TerrainRow label="Dist. to Water" value={`${place.distToWaterM.toFixed(0)} m`} />
