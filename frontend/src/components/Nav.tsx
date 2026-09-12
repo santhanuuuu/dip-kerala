@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { type Page } from '../App';
 import { getCurrentUser, adminLogin } from '../lib/api';
 import useIsMobile from '../hooks/useIsMobile';
+import Logo from './Logo';
 
 interface NavProps {
   navigate: (page: Page) => void;
@@ -202,11 +203,9 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
           onClick={() => goTo('home')}
           style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
         >
-          <div style={{
-            width: 28, height: 28, background: '#1F6F64',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, fontWeight: 700, color: '#F2F4EF', fontFamily: 'IBM Plex Mono, monospace',
-          }}>◭</div>
+          <div style={{ width: 28, height: 28, borderRadius: 4, overflow: 'hidden' }}>
+            <Logo size={28} />
+          </div>
           <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 15, color: '#12262B', letterSpacing: '0.04em' }}>
             DIP<span style={{ color: '#1F6F64' }}>/</span>Kerala
           </span>

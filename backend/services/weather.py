@@ -54,7 +54,20 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
         "timezone": "auto",
     }
     response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.RequestException:
+        # Even with retries exhausted, Open-Meteo's free tier can still be temporarily
+        # rate-limited or slow. Rather than hard-failing the whole risk query, fall back
+        # to the last successfully fetched value for this same location if we have one --
+        # even if it's past its normal 10-minute freshness window. Stale rainfall data is
+        # far more useful than no data at all, and this is honestly flagged as stale so
+        # callers can disclose it rather than presenting it as fresh.
+        stale = _weather_cache.get(key)
+        if stale is not None:
+            _, stale_result = stale
+            return {**stale_result, "is_stale": True}
+        raise
     data = response.json()
 
     daily = data.get("daily", {})
@@ -66,6 +79,7 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
         "current_temperature_c": data.get("current", {}).get("temperature_2m"),
         "current_humidity_pct": data.get("current", {}).get("relative_humidity_2m"),
         "current_wind_kmh": data.get("current", {}).get("wind_speed_10m"),
+        "is_stale": False,
     }
     _weather_cache[key] = (now, result)
     return result
