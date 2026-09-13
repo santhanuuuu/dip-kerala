@@ -37,16 +37,22 @@ RELEVANCE_KEYWORDS = (
     "flood", "flooding", "landslide", "landslides", "cyclone", "hurricane", "typhoon",
     "earthquake", "tsunami", "wildfire", "tornado", "heavy rainfall", "torrential rain",
     "monsoon flood", "mudslide", "drought", "volcanic eruption", "volcano erupt",
-    "storm surge", "flash flood", "disaster relief", "evacuat",  # catches "evacuate"/"evacuation"
+    "storm surge", "flash flood",
 )
-
-KERALA_KEYWORDS = ("kerala", "ksdma", "malayalam", "thiruvananthapuram", "kochi", "kozhikode",
-                    "ernakulam", "kottayam", "alappuzha", "thrissur", "idukki", "wayanad")
 
 
 def _is_relevant(title: str | None, description: str | None) -> bool:
-    text = f"{title or ''} {description or ''}".lower()
+    # Requires the keyword in the TITLE specifically, not just the description -- a much
+    # stricter bar. Matching on description alone let through articles that only mentioned
+    # a disaster in passing (e.g. a crime or politics story that references "the recent
+    # floods" once in its summary). Dropped "evacuat"/"disaster relief" from the keyword
+    # list entirely -- both matched too many unrelated contexts (building evacuations,
+    # unrelated charity/political news).
+    text = (title or "").lower()
     return any(kw in text for kw in RELEVANCE_KEYWORDS)
+
+KERALA_KEYWORDS = ("kerala", "ksdma", "malayalam", "thiruvananthapuram", "kochi", "kozhikode",
+                    "ernakulam", "kottayam", "alappuzha", "thrissur", "idukki", "wayanad")
 
 
 def _is_kerala_related(title: str | None, description: str | None) -> bool:

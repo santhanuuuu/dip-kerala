@@ -16,7 +16,7 @@ def get_disaster_news(db: Session = Depends(get_db)):
     articles = (
         db.query(NewsCache)
         .order_by(NewsCache.is_kerala.desc(), NewsCache.published_at.desc())
-        .limit(30)
+        .limit(6)
         .all()
     )
     return {
