@@ -73,8 +73,9 @@ def _fallback_weather(key: tuple[float, float]) -> dict:
 
 def fetch_live_weather(lat: float, lon: float) -> dict:
     """Returns past-7-day rainfall total (matches the training window used in Notebook 00/01/02)
-    plus current conditions for display. Raises requests.RequestException on network failure --
-    callers should catch this and decide whether to fail the request or degrade gracefully."""
+    plus current conditions for display. Only raises requests.RequestException if Open-Meteo
+    fails AND no fallback (cached or climatological) is available -- which _fallback_weather
+    never actually lets happen, so in practice this never raises."""
     key = _cache_key(lat, lon)
     now = datetime.now(timezone.utc)
     cached = _weather_cache.get(key)
@@ -95,11 +96,17 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
         "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
         "timezone": "auto",
     }
-    response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT)
+
     try:
+        response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
     except requests.RequestException:
+        # Covers connection errors, timeouts, and exhausted retries -- not just bad HTTP
+        # status codes. Previously only raise_for_status() was wrapped here, so a network-level
+        # failure (Open-Meteo unreachable/timing out) skipped the fallback entirely and
+        # propagated as a raw 503 to the client instead of degrading gracefully.
         return _fallback_weather(key)
+
     data = response.json()
 
     daily = data.get("daily", {})
