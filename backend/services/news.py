@@ -7,11 +7,15 @@ WHERE TO ADD YOUR API KEY: set NEWSAPI_KEY in your .env file (see .env.example).
 Get a free key at https://newsapi.org/register -- free tier allows 100 requests/day,
 which is more than enough for an hourly refresh (24 requests/day).
 
-SCOPE: worldwide disaster news, with anything Kerala-related tagged and surfaced first.
-The previous India-only version let unrelated articles through (celebrity news, cybercrime,
-inflation, shipping) because NewsAPI's OR-query matching is loose -- fixed here with a
-strict keyword post-filter that runs on every article before it's allowed into the cache,
-regardless of what NewsAPI itself decided to return.
+SCOPE: Kerala-only, genuine flood/landslide/natural-disaster news -- nothing worldwide,
+nothing tangential. Two earlier bugs let unrelated articles through: (1) the query was
+worldwide with Kerala-tagged articles merely sorted first, so non-Kerala disaster stories
+filled empty slots, and (2) a couple of relevance keywords were ambiguous English words
+("drought", "hurricane") that also match sports headlines ("title drought", the Carolina
+Hurricanes hockey team) with zero connection to actual weather events. Fixed by requiring
+BOTH a genuine disaster keyword AND a Kerala-location keyword in the same article before
+it's allowed into the cache -- a hockey or tennis story is never going to mention Kerala,
+so this closes both holes at once.
 """
 import os
 import requests
@@ -24,21 +28,25 @@ NEWSAPI_URL = "https://newsapi.org/v2/everything"
 # "emergency", "management", or "disaster" alone, since those match all kinds of unrelated
 # news (political crises, financial news, corporate "crisis management" pieces, etc.).
 DISASTER_QUERY = (
-    '"flood" OR "flooding" OR "landslide" OR "landslides" OR "cyclone" OR "hurricane" '
-    'OR "typhoon" OR "earthquake" OR "tsunami" OR "wildfire" OR "tornado" OR '
-    '"heavy rainfall" OR "torrential rain" OR "monsoon flooding" OR "mudslide" OR '
-    '"drought" OR "volcanic eruption"'
+    '"flood" OR "flooding" OR "landslide" OR "landslides" OR "cyclone" OR "heavy rainfall" '
+    'OR "torrential rain" OR "monsoon flooding" OR "mudslide" OR "flash flood" OR '
+    '"landslip" OR "drought" OR "earthquake" OR "tsunami"'
 )
 
-# The same terms, used again as a strict post-fetch filter -- NewsAPI's own query matching
-# is loose enough that articles mentioning none of these can still slip through (observed:
-# celebrity news, cybercrime, inflation, and shipping stories all matched the old query).
+# Query sent to NewsAPI: Kerala AND a disaster term, so NewsAPI itself is already narrowed
+# to Kerala-relevant results rather than relying solely on the post-fetch filter below.
+NEWS_QUERY = f'"Kerala" AND ({DISASTER_QUERY})'
+
+# The same disaster terms, used again as a strict post-fetch filter -- NewsAPI's own query
+# matching is loose enough that articles missing these can still slip through.
 RELEVANCE_KEYWORDS = (
-    "flood", "flooding", "landslide", "landslides", "cyclone", "hurricane", "typhoon",
-    "earthquake", "tsunami", "wildfire", "tornado", "heavy rainfall", "torrential rain",
-    "monsoon flood", "mudslide", "drought", "volcanic eruption", "volcano erupt",
-    "storm surge", "flash flood",
+    "flood", "flooding", "landslide", "landslides", "cyclone", "heavy rainfall",
+    "torrential rain", "monsoon flood", "mudslide", "flash flood", "landslip",
+    "drought", "earthquake", "tsunami", "storm surge",
 )
+
+KERALA_KEYWORDS = ("kerala", "ksdma", "malayalam", "thiruvananthapuram", "kochi", "kozhikode",
+                    "ernakulam", "kottayam", "alappuzha", "thrissur", "idukki", "wayanad")
 
 
 def _is_relevant(title: str | None, description: str | None) -> bool:
@@ -51,9 +59,6 @@ def _is_relevant(title: str | None, description: str | None) -> bool:
     text = (title or "").lower()
     return any(kw in text for kw in RELEVANCE_KEYWORDS)
 
-KERALA_KEYWORDS = ("kerala", "ksdma", "malayalam", "thiruvananthapuram", "kochi", "kozhikode",
-                    "ernakulam", "kottayam", "alappuzha", "thrissur", "idukki", "wayanad")
-
 
 def _is_kerala_related(title: str | None, description: str | None) -> bool:
     text = f"{title or ''} {description or ''}".lower()
@@ -61,10 +66,12 @@ def _is_kerala_related(title: str | None, description: str | None) -> bool:
 
 
 def fetch_disaster_news(page_size=60) -> list[dict]:
-    """Returns a list of news article dicts, each tagged with is_kerala, already filtered
-    down to genuinely disaster-related articles. Raises requests.RequestException on
-    failure -- the scheduled job should catch this and just keep the existing cache
-    rather than crash."""
+    """Returns a list of Kerala flood/landslide/natural-disaster news article dicts.
+    An article is only included if it's BOTH a genuine disaster story AND Kerala-related --
+    that combination is what eliminates worldwide disaster news and ambiguous-keyword false
+    positives (sports "drought"/"Hurricanes" headlines) in one pass. Raises
+    requests.RequestException on failure -- the scheduled job should catch this and just
+    keep the existing cache rather than crash."""
     if not NEWSAPI_KEY:
         raise RuntimeError(
             "NEWSAPI_KEY is not set. Add it to your .env file -- see .env.example. "
@@ -72,7 +79,7 @@ def fetch_disaster_news(page_size=60) -> list[dict]:
         )
 
     params = {
-        "q": DISASTER_QUERY,
+        "q": NEWS_QUERY,
         "language": "en",
         "sortBy": "publishedAt",
         "pageSize": page_size,
@@ -90,7 +97,9 @@ def fetch_disaster_news(page_size=60) -> list[dict]:
             continue
         title, description = item.get("title"), item.get("description")
         if not _is_relevant(title, description):
-            continue  # NewsAPI's own match was too loose -- reject anything not genuinely about a disaster
+            continue  # not a genuine disaster story
+        if not _is_kerala_related(title, description):
+            continue  # not Kerala-related -- this is a Kerala-only feed now
         seen_urls.add(url)
         articles.append({
             "title": title,
@@ -99,7 +108,7 @@ def fetch_disaster_news(page_size=60) -> list[dict]:
             "image_url": item.get("urlToImage"),
             "source_name": item.get("source", {}).get("name"),
             "published_at": item.get("publishedAt"),
-            "is_kerala": _is_kerala_related(title, description),
+            "is_kerala": True,
         })
     return articles
 
@@ -134,6 +143,5 @@ def refresh_news_cache(db_session):
             is_kerala=article["is_kerala"],
         ))
     db_session.commit()
-    kerala_count = sum(1 for a in articles if a["is_kerala"])
-    print(f"News cache refreshed: {len(articles)} genuinely disaster-related articles "
-          f"({kerala_count} Kerala-related) at {datetime.now(timezone.utc).isoformat()}")
+    print(f"News cache refreshed: {len(articles)} Kerala flood/landslide/disaster articles "
+          f"at {datetime.now(timezone.utc).isoformat()}")

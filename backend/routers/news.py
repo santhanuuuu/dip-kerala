@@ -11,11 +11,13 @@ router = APIRouter(prefix="/api/news", tags=["news"])
 @router.get("")
 def get_disaster_news(db: Session = Depends(get_db)):
     """Always reads from the cache (refreshed hourly by the scheduler in main.py) -- never
-    calls NewsAPI directly on a page load, so this endpoint is always fast. Kerala-related
-    articles are surfaced first (is_kerala desc), then most recent within each group."""
+    calls NewsAPI directly on a page load, so this endpoint is always fast. Every cached
+    article is already Kerala-specific (enforced in services/news.py), so this just returns
+    the most recent ones -- no worldwide fallback."""
     articles = (
         db.query(NewsCache)
-        .order_by(NewsCache.is_kerala.desc(), NewsCache.published_at.desc())
+        .filter(NewsCache.is_kerala.is_(True))
+        .order_by(NewsCache.published_at.desc())
         .limit(6)
         .all()
     )
