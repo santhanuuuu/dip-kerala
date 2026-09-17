@@ -1,4 +1,6 @@
 import io
+import traceback
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from PIL import Image
@@ -11,6 +13,38 @@ from services import inference
 router = APIRouter(prefix="/api/damage-assessment", tags=["damage"])
 
 IMG_SIZE = (384, 384)  # matches the resolution used in Notebook 03's final training run
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+def _looks_like_satellite_image(img: Image.Image) -> bool:
+    """Heuristic, not a trained classifier -- we don't have a labeled dataset of
+    'satellite vs not' to train one. Satellite/aerial imagery is a top-down (nadir) view,
+    so two things it essentially never contains are (a) visible sky and (b) a face/skin
+    filling much of the frame -- both are hallmarks of an ordinary ground-level photo.
+    """
+    thumb = img.convert("RGB").resize((64, 64))
+    arr = np.asarray(thumb).astype(np.int16)
+    r, g, b = arr[:, :, 0], arr[:, :, 1], arr[:, :, 2]
+
+    max_c = np.maximum(np.maximum(r, g), b)
+    min_c = np.minimum(np.minimum(r, g), b)
+    skin_mask = (
+        (r > 95) & (g > 40) & (b > 20)
+        & ((max_c - min_c) > 15)
+        & (np.abs(r - g) > 15)
+        & (r > g) & (r > b)
+    )
+    skin_fraction = float(skin_mask.mean())
+
+    top_band = arr[:13, :, :]
+    tr, tg, tb = top_band[:, :, 0], top_band[:, :, 1], top_band[:, :, 2]
+    brightness = (tr.astype(np.float32) + tg + tb) / 3
+    t_max = np.maximum(np.maximum(tr, tg), tb)
+    t_min = np.minimum(np.minimum(tr, tg), tb)
+    sky_mask = (tb >= tr) & (brightness > 140) & ((t_max - t_min) < 40)
+    sky_fraction = float(sky_mask.mean())
+
+    return skin_fraction <= 0.12 and sky_fraction <= 0.35
 
 
 def _preprocess_image(file_bytes: bytes):
@@ -47,14 +81,35 @@ async def run_damage_assessment(
     pre_bytes = await pre_image.read()
     post_bytes = await post_image.read()
 
-    pre_tensor = _preprocess_image(pre_bytes)
-    post_tensor = _preprocess_image(post_bytes)
+    if len(pre_bytes) > MAX_UPLOAD_BYTES or len(post_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Each image must be under 10 MB.")
 
-    result = inference.predict_damage(pre_tensor, post_tensor)
+    try:
+        pre_pil = Image.open(io.BytesIO(pre_bytes))
+        pre_pil.load()
+        post_pil = Image.open(io.BytesIO(post_bytes))
+        post_pil.load()
+    except Exception:
+        raise HTTPException(status_code=422, detail="One of the uploaded files isn't a readable image.")
 
-    # NOTE: this example stores images in-memory only for the response; a real deployment
-    # should upload pre_bytes/post_bytes to S3/Cloud Storage and store the resulting URLs.
-    # Left as a TODO since bucket/storage choice is a deployment decision, not an ML one.
+    if not _looks_like_satellite_image(pre_pil) or not _looks_like_satellite_image(post_pil):
+        raise HTTPException(
+            status_code=422,
+            detail="This doesn't look like a satellite/aerial image. Please upload a top-down "
+                   "pre-event and post-event image pair for this location.",
+        )
+
+    try:
+        pre_tensor = _preprocess_image(pre_bytes)
+        post_tensor = _preprocess_image(post_bytes)
+        result = inference.predict_damage(pre_tensor, post_tensor)
+    except Exception:
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail="Something went wrong while running the damage assessment. Please try again.",
+        )
+
     record = DamageAssessment(
         place_id=place_id,
         submitted_by=user.id,

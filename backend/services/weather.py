@@ -9,15 +9,19 @@ from urllib3.util.retry import Retry
 from datetime import date, timedelta, datetime, timezone
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 10  # was 30 -- a hung/slow call here blocks every caller, including the
+                      # alerts scan which calls this once per place; fail fast instead.
 CACHE_TTL_SECONDS = 600
 
 _weather_cache: dict[tuple[float, float], tuple[datetime, dict]] = {}
 
 _session = requests.Session()
 _retry = Retry(
-    total=4,
-    backoff_factor=1.0,  # 1s, 2s, 4s, 8s -- gives Open-Meteo's free-tier rate limit time to reset
+    total=2,  # was 4 -- 0.5s, 1s backoff (~1.5s worst case) instead of up to ~15s. Open-Meteo's
+              # free tier can rate-limit shared cloud IPs (like Render's), and a single slow/failing
+              # place used to stall the whole alerts scan for ~15s before falling back; this fails
+              # fast so degraded weather doesn't also mean a degraded UI.
+    backoff_factor=0.5,
     status_forcelist=[429, 500, 502, 503, 504],
     allowed_methods=["GET"],
 )
@@ -100,11 +104,11 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
     try:
         response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT)
         response.raise_for_status()
-    except requests.RequestException:
-        # Covers connection errors, timeouts, and exhausted retries -- not just bad HTTP
-        # status codes. Previously only raise_for_status() was wrapped here, so a network-level
-        # failure (Open-Meteo unreachable/timing out) skipped the fallback entirely and
-        # propagated as a raw 503 to the client instead of degrading gracefully.
+    except requests.RequestException as e:
+        # Log the real reason -- previously this was swallowed completely, so a persistent
+        # failure (e.g. Open-Meteo rate-limiting Render's shared IPs) looked identical to a
+        # one-off blip and was impossible to diagnose from Render's logs.
+        print(f"Open-Meteo fetch failed for ({lat}, {lon}): {type(e).__name__}: {e}")
         return _fallback_weather(key)
 
     data = response.json()

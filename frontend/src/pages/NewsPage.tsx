@@ -35,7 +35,7 @@ export default function NewsPage() {
         setArticles(d.results || []);
         setLastRefreshed(d.last_refreshed || null);
       })
-      .catch(() => setError('Could not load news from the backend.'))
+      .catch(() => setError('Could not load the news feed right now. Please try again shortly.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -76,7 +76,7 @@ export default function NewsPage() {
               No articles yet
             </div>
             <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 14, color: MUTED, margin: 0 }}>
-              The news cache refreshes hourly on the backend — check back shortly.
+              No Kerala flood, landslide, or disaster news at the moment — check back shortly.
             </p>
           </div>
         )}

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ _ENDPOINT_CACHE_TTL = timedelta(minutes=10)
 _alerts_scan_cache: dict[tuple, tuple[datetime, dict]] = {}
 _district_ranking_cache: dict[tuple, tuple[datetime, dict]] = {}
 
+_WEATHER_POOL_WORKERS = 10
+
 
 def _get_endpoint_cache(cache: dict, key: tuple) -> dict | None:
     entry = cache.get(key)
@@ -31,12 +34,29 @@ def _set_endpoint_cache(cache: dict, key: tuple, data: dict) -> None:
     cache[key] = (datetime.now(timezone.utc), data)
 
 
+def _fetch_weather_for_places(places: list) -> dict:
+    def _get_lat_lon(p):
+        if isinstance(p, dict):
+            return p["lat"], p["lon"]
+        return p.centroid_lat, p.centroid_lon
+
+    results: dict[int, dict | None] = {}
+    with ThreadPoolExecutor(max_workers=_WEATHER_POOL_WORKERS) as pool:
+        future_to_idx = {
+            pool.submit(weather.fetch_live_weather, *_get_lat_lon(p)): i
+            for i, p in enumerate(places)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+            except requests.RequestException:
+                results[idx] = None
+    return results
+
+
 @router.get("/{place_name}")
 def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(get_current_user_optional)):
-    """The core endpoint. Directly mirrors Notebook 04's get_area_risk() function:
-    static terrain features come from the database (GEE-derived, precomputed);
-    rainfall is fetched live from Open-Meteo right now."""
-
     place = db.query(Place).filter(func.lower(Place.name) == place_name.lower()).first()
     if not place:
         place = db.query(Place).filter(Place.name.ilike(f"%{place_name}%")).first()
@@ -52,8 +72,6 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
     try:
         live_weather = weather.fetch_live_weather(place.centroid_lat, place.centroid_lon)
     except requests.RequestException:
-        # Deliberately not including the raw exception (it contains the full request URL) --
-        # log it server-side if you need to debug, but never surface it to the client.
         raise HTTPException(
             status_code=503,
             detail="The live weather service is temporarily busy. Please try again in a minute.",
@@ -115,20 +133,18 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
 
 @router.get("/scan/alerts")
 def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = Depends(get_db)):
-    """Scans places for high flood risk. Intended to be called by a scheduled job (see
-    main.py), not on every page load -- exposed here so it can also be triggered manually
-    or tested directly."""
     cache_key = (threshold, limit)
     cached = _get_endpoint_cache(_alerts_scan_cache, cache_key)
     if cached is not None:
         return cached
 
     places = db.query(Place).filter(Place.elevation.isnot(None)).limit(limit).all()
+    weather_by_idx = _fetch_weather_for_places(places)
+
     alerts = []
-    for place in places:
-        try:
-            live_weather = weather.fetch_live_weather(place.centroid_lat, place.centroid_lon)
-        except requests.RequestException:
+    for i, place in enumerate(places):
+        live_weather = weather_by_idx.get(i)
+        if live_weather is None:
             continue
         flood_result = inference.predict_flood(
             elevation=place.elevation, slope=place.slope,
@@ -146,9 +162,6 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 
 @router.get("/districts/ranking")
 def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get_db)):
-    """REAL computed ranking, not sample/mock numbers -- scans a handful of places per
-    district live, averages flood probability and landslide risk. Full responses are cached
-    for 10 minutes; every number is genuinely computed from the trained models."""
     cache_key = (limit_per_district,)
     cached = _get_endpoint_cache(_district_ranking_cache, cache_key)
     if cached is not None:
@@ -157,12 +170,6 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
     districts = [row[0] for row in db.query(Place.district).distinct().all()]
     landslide_score_map = {"Low": 25, "Moderate": 50, "High": 75, "Critical": 100}
 
-    # Pull every district's sample places into plain dicts, then close the DB session
-    # BEFORE making any of the slow, sequential weather API calls below. Previously the
-    # session stayed open (holding a live transaction) across up to ~70 sequential HTTP
-    # calls that can each take several seconds with retries -- that repeatedly leaked
-    # long-held "idle in transaction" connections against the database. Extracting plain
-    # values upfront and releasing the connection immediately avoids that entirely.
     district_places = {}
     for district in districts:
         places = (
@@ -183,15 +190,20 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
                 }
                 for p in places
             ]
-    db.close()  # release the connection now -- nothing below touches the database again
+    db.close()
+
+    flat_places = [p for places in district_places.values() for p in places]
+    weather_by_idx = _fetch_weather_for_places(flat_places)
+    place_weather: dict[int, dict | None] = dict(weather_by_idx)
 
     rankings = []
+    idx = 0
     for district, places in district_places.items():
         flood_scores, landslide_scores = [], []
         for place in places:
-            try:
-                live_weather = weather.fetch_live_weather(place["lat"], place["lon"])
-            except requests.RequestException:
+            live_weather = place_weather.get(idx)
+            idx += 1
+            if live_weather is None:
                 continue
             flood_result = inference.predict_flood(
                 elevation=place["elevation"], slope=place["slope"],
@@ -234,9 +246,6 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
 
 @router.get("/history/daily")
 def daily_query_history(days: int = 7, db: Session = Depends(get_db)):
-    """Real aggregation from the risk_queries table -- NOT fabricated sample data. Will be
-    sparse or empty on a freshly-seeded database; that's the honest state of a system with
-    no usage history yet, not a bug to hide with invented numbers."""
     from sqlalchemy import func as sqlfunc
     from datetime import datetime, timedelta
 
