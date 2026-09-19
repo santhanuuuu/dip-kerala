@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -17,8 +16,6 @@ _ENDPOINT_CACHE_TTL = timedelta(minutes=10)
 _alerts_scan_cache: dict[tuple, tuple[datetime, dict]] = {}
 _district_ranking_cache: dict[tuple, tuple[datetime, dict]] = {}
 
-_WEATHER_POOL_WORKERS = 10
-
 
 def _get_endpoint_cache(cache: dict, key: tuple) -> dict | None:
     entry = cache.get(key)
@@ -35,28 +32,34 @@ def _set_endpoint_cache(cache: dict, key: tuple, data: dict) -> None:
 
 
 def _fetch_weather_for_places(places: list) -> dict:
+    """Fetches live weather for a list of place-like objects (needs .centroid_lat/.centroid_lon
+    or ["lat"]/["lon"]) with ONE batched Open-Meteo request instead of one request per place --
+    see weather.fetch_live_weather_batch's docstring for why this matters: fetching one place
+    at a time (even concurrently) reliably triggered Open-Meteo's rate limit, which silently
+    degraded every result to a generic seasonal-average rainfall number and made flood risk
+    look uniformly elevated regardless of actual current conditions.
+
+    Returns {place_index: weather_dict} -- always populated (weather.fetch_live_weather_batch
+    guarantees a result, real or climatological-fallback, for every coordinate given)."""
     def _get_lat_lon(p):
         if isinstance(p, dict):
             return p["lat"], p["lon"]
         return p.centroid_lat, p.centroid_lon
 
-    results: dict[int, dict | None] = {}
-    with ThreadPoolExecutor(max_workers=_WEATHER_POOL_WORKERS) as pool:
-        future_to_idx = {
-            pool.submit(weather.fetch_live_weather, *_get_lat_lon(p)): i
-            for i, p in enumerate(places)
-        }
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            try:
-                results[idx] = future.result()
-            except requests.RequestException:
-                results[idx] = None
-    return results
+    coords = [_get_lat_lon(p) for p in places]
+    batch_results = weather.fetch_live_weather_batch(coords)
+    return {
+        i: batch_results[weather._cache_key(lat, lon)]
+        for i, (lat, lon) in enumerate(coords)
+    }
 
 
 @router.get("/{place_name}")
 def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(get_current_user_optional)):
+    """The core endpoint. Directly mirrors Notebook 04's get_area_risk() function:
+    static terrain features come from the database (GEE-derived, precomputed);
+    rainfall is fetched live from Open-Meteo right now."""
+
     place = db.query(Place).filter(func.lower(Place.name) == place_name.lower()).first()
     if not place:
         place = db.query(Place).filter(Place.name.ilike(f"%{place_name}%")).first()
@@ -113,6 +116,8 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
             "wind_kmh": live_weather["current_wind_kmh"],
             "rainfall_7day_mm": live_weather["rainfall_7day_mm"],
             "daily_breakdown": live_weather["daily_breakdown"],
+            "is_stale": live_weather.get("is_stale", False),
+            "is_climatological_estimate": live_weather.get("is_climatological_estimate", False),
         },
         "flood": {
             **flood_result,
@@ -133,6 +138,15 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
 
 @router.get("/scan/alerts")
 def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = Depends(get_db)):
+    """Scans places for high flood risk. Intended to be called by a scheduled job (see
+    main.py), not on every page load -- exposed here so it can also be triggered manually
+    or tested directly.
+
+    Weather for ALL places is fetched in ONE batched Open-Meteo request (see
+    weather.fetch_live_weather_batch) -- previously fetching one place at a time reliably
+    triggered Open-Meteo's rate limit, silently degrading every result to a generic
+    seasonal-average rainfall figure and making flood risk look uniformly elevated even
+    during genuinely dry conditions."""
     cache_key = (threshold, limit)
     cached = _get_endpoint_cache(_alerts_scan_cache, cache_key)
     if cached is not None:
@@ -143,9 +157,7 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 
     alerts = []
     for i, place in enumerate(places):
-        live_weather = weather_by_idx.get(i)
-        if live_weather is None:
-            continue
+        live_weather = weather_by_idx[i]
         flood_result = inference.predict_flood(
             elevation=place.elevation, slope=place.slope,
             rainfall_7day_mm=live_weather["rainfall_7day_mm"],
@@ -154,7 +166,12 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
             flow_accumulation=place.flow_accumulation,
         )
         if flood_result["probability"] > threshold:
-            alerts.append({"place": place.name, "district": place.district, **flood_result})
+            alerts.append({
+                "place": place.name, "district": place.district,
+                "rainfall_7day_mm": live_weather["rainfall_7day_mm"],
+                "is_climatological_estimate": live_weather.get("is_climatological_estimate", False),
+                **flood_result,
+            })
     result = {"scanned": len(places), "alerts": alerts}
     _set_endpoint_cache(_alerts_scan_cache, cache_key, result)
     return result
@@ -162,6 +179,9 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 
 @router.get("/districts/ranking")
 def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get_db)):
+    """REAL computed ranking, not sample/mock numbers -- scans a handful of places per
+    district live, averages flood probability and landslide risk. Full responses are cached
+    for 10 minutes; every number is genuinely computed from the trained models."""
     cache_key = (limit_per_district,)
     cached = _get_endpoint_cache(_district_ranking_cache, cache_key)
     if cached is not None:
@@ -190,21 +210,20 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
                 }
                 for p in places
             ]
-    db.close()
+    db.close()  # release the connection before the (potentially slow) weather batch call below
 
+    # Flatten every district's places into one list so all weather for ALL districts is
+    # fetched in a SINGLE batched request, same reasoning as the alerts scan above.
     flat_places = [p for places in district_places.values() for p in places]
     weather_by_idx = _fetch_weather_for_places(flat_places)
-    place_weather: dict[int, dict | None] = dict(weather_by_idx)
 
     rankings = []
     idx = 0
     for district, places in district_places.items():
         flood_scores, landslide_scores = [], []
         for place in places:
-            live_weather = place_weather.get(idx)
+            live_weather = weather_by_idx[idx]
             idx += 1
-            if live_weather is None:
-                continue
             flood_result = inference.predict_flood(
                 elevation=place["elevation"], slope=place["slope"],
                 rainfall_7day_mm=live_weather["rainfall_7day_mm"],
