@@ -26,6 +26,7 @@ export default function HomePage({ navigate }: HomePageProps) {
   const [loading, setLoading] = useState(false);
   const [allPlaces, setAllPlaces] = useState<Place[]>([]);
   const [alerts, setAlerts] = useState<ReturnType<typeof fetchRealAlerts> extends Promise<infer T> ? T : never>([]);
+  const [alertsLoading, setAlertsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [placesReady, setPlacesReady] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -40,7 +41,11 @@ export default function HomePage({ navigate }: HomePageProps) {
         setPlacesReady(true);
       })
       .catch((e) => setLoadError(e.message));
-    fetchRealAlerts().then(setAlerts).catch(() => setAlerts([]));
+    setAlertsLoading(true);
+    fetchRealAlerts()
+      .then(setAlerts)
+      .catch(() => setAlerts([]))
+      .finally(() => setAlertsLoading(false));
   }, [retryTick]);
 
   const handleSearch = () => {
@@ -100,7 +105,7 @@ export default function HomePage({ navigate }: HomePageProps) {
           color: '#B54A2A', letterSpacing: '0.08em',
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#B54A2A', display: 'inline-block' }} className="animate-pulse-risk" />
-          ACTIVE MONSOON SEASON · {criticalCount} CRITICAL · {highCount} HIGH ALERTS
+          ACTIVE MONSOON SEASON · {alertsLoading ? 'CHECKING CURRENT ALERTS…' : `${criticalCount} CRITICAL · ${highCount} HIGH ALERTS`}
           <span style={{ color: MUTED, marginLeft: 4 }}>{new Date().toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}</span>
         </div>
 
@@ -321,7 +326,17 @@ export default function HomePage({ navigate }: HomePageProps) {
             <button onClick={() => navigate('alerts')} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer' }}>VIEW ALL →</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {alerts.slice(0, 4).map(alert => (
+            {alertsLoading && (
+              <div style={{ padding: '14px 16px', background: '#ffffff', border: '1px solid rgba(18,38,43,0.07)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
+                Scanning current conditions…
+              </div>
+            )}
+            {!alertsLoading && alerts.length === 0 && (
+              <div style={{ padding: '14px 16px', background: '#ffffff', border: '1px solid rgba(18,38,43,0.07)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
+                No active bulletins right now.
+              </div>
+            )}
+            {!alertsLoading && alerts.slice(0, 4).map(alert => (
               <div key={alert.id} style={{
                 display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '80px 1fr auto', gap: isMobile ? 4 : 16,
                 padding: '12px 16px',
