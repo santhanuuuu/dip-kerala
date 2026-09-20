@@ -1,0 +1,10 @@
+{
+  "model": "logistic_regression",
+  "predictor": "monsoon_jjas_cumulative_mm",
+  "coefficient": 0.010823993776868403,
+  "intercept": -21.39357155754309,
+  "trained_on": "kerala_state_rainfall_baseline.csv, 1901-2018 (118 years)",
+  "test_accuracy": 0.9,
+  "test_auc": 0.9822222222222223,
+  "notes": "Predicts P(flood conditions) from JUNE-SEPTEMBER CUMULATIVE rainfall (mm) at a central-Kerala reference point, NOT a 7-day window. See seasonal_rainfall.py."
+}

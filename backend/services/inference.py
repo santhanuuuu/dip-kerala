@@ -11,6 +11,8 @@ import pandas as pd
 # inference (the two most-used endpoints) don't need PyTorch at all, so we don't force every
 # environment running this backend to have it installed just to serve flood/landslide requests.
 
+from services import seasonal_rainfall
+
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ML_MODELS_DIR = os.path.join(BASE_DIR, "ml_models")
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -21,6 +23,26 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 # with what Notebook 05 actually trained on.
 FLOOD_FEATURE_COLS = ["elevation", "slope", "rainfall_7day_mm", "dist_to_water_m", "vegetation", "builtup"]
 LANDSLIDE_FEATURE_COLS = ["elevation", "slope", "rainfall_7day_mm", "vegetation", "dist_to_water_m"]
+
+# --- Rainfall calibration -------------------------------------------------------------
+# flood_model_v2 and landslide_model_v2 (see Notebook 00, cell "FEATURE STORE SUMMARY") were
+# trained ENTIRELY on rainfall_7day_mm values from the single most extreme week of the August
+# 2018 Kerala floods (13-19 Aug 2018) -- the printed training output confirms the actual range
+# seen was 132.8mm to 1041.5mm. The model has NEVER seen a rainfall value below 132.8mm, so it
+# can't distinguish "completely dry" from "the low end of a monsoon week" -- it falls back on
+# terrain alone for any live rainfall below that floor.
+#
+# THE FIX (see seasonal_rainfall.py + Notebook 06): rather than a hand-tuned guess about how
+# much to dampen, this now uses a genuinely DATA-DRIVEN seasonal factor -- a logistic
+# regression fitted on 118 years (1901-2018) of real statewide rainfall/flood outcomes,
+# applied to Kerala's actual SEASON-TO-DATE (Jun 1-today) cumulative rainfall. When the season
+# has been dry, that factor is near 0 and scales terrain-driven risk down accordingly; when
+# the season is genuinely wet, the factor approaches 1 and the raw terrain model's output
+# passes through mostly unchanged. This is a disclosed CALIBRATION layered on top of the
+# terrain models, not a retrain -- every adjusted prediction reports both the raw and
+# calibrated numbers so nothing is silently hidden.
+FLOOD_RISK_HIGH = 0.7
+FLOOD_RISK_MODERATE = 0.4
 
 
 class ModelRegistry:
@@ -130,7 +152,11 @@ registry = ModelRegistry()
 
 def predict_flood(elevation, slope, rainfall_7day_mm, dist_to_water_m, vegetation, builtup, flow_accumulation=None):
     """Directly mirrors Notebook 04/05's flood section. Returns probability + label.
-    flow_accumulation is only used by the v2 model -- ignored (and not required) for v1."""
+    flow_accumulation is only used by the v2 model -- ignored (and not required) for v1.
+
+    Applies the seasonal rainfall calibration (see module docstring + seasonal_rainfall.py)
+    whenever the season's factor is below 1.0 -- always discloses both the raw model output
+    and the calibrated one, plus the seasonal context, so nothing is silently hidden."""
     if registry.flood_model is None:
         raise RuntimeError("Flood model not loaded -- check backend/ml_models/ for flood_model(.pkl or _v2.pkl)")
 
@@ -147,14 +173,35 @@ def predict_flood(elevation, slope, rainfall_7day_mm, dist_to_water_m, vegetatio
     X = pd.DataFrame([row])[registry.flood_feature_cols]
 
     X_scaled = registry.flood_scaler.transform(X)
-    prob = float(registry.flood_model.predict_proba(X_scaled)[0][1])
-    risk_level = "HIGH" if prob > 0.7 else "MODERATE" if prob > 0.4 else "LOW"
-    return {"probability": prob, "risk_level": risk_level}
+    raw_prob = float(registry.flood_model.predict_proba(X_scaled)[0][1])
+
+    seasonal = seasonal_rainfall.get_seasonal_flood_factor()
+    factor = seasonal["factor"]
+    calibrated_prob = raw_prob * factor
+    risk_level = "HIGH" if calibrated_prob > FLOOD_RISK_HIGH else "MODERATE" if calibrated_prob > FLOOD_RISK_MODERATE else "LOW"
+
+    result = {"probability": calibrated_prob, "risk_level": risk_level}
+    if factor < 1.0:
+        result["raw_model_probability"] = raw_prob
+        result["rainfall_calibration_applied"] = True
+        result["calibration_note"] = (
+            f"Terrain-based model output ({raw_prob:.0%}) scaled by a seasonal rainfall factor "
+            f"of {factor:.2f} -- {seasonal['note']}"
+        )
+    return result
 
 
 def predict_landslide(elevation, slope, rainfall_7day_mm, vegetation, dist_to_water_m, soil_texture_class=None):
     """Directly mirrors Notebook 04/05's landslide section.
-    soil_texture_class is only used by the v2 model -- ignored (and not required) for v1."""
+    soil_texture_class is only used by the v2 model -- ignored (and not required) for v1.
+
+    Applies the SAME seasonal rainfall factor used for flood (see seasonal_rainfall.py) to the
+    risk TIER (Low/Moderate/High/Critical), since this model outputs a class, not a
+    probability. NOTE: this reuses the flood calibration as a proxy -- no dedicated multi-year
+    landslide dataset was available to fit a landslide-specific version (Kerala landslide data
+    found so far only covers the single 2018 event). Landslides are also monsoon-saturation
+    driven, so this is a reasonable stand-in, not a precise fit -- revisit if a multi-year
+    landslide inventory becomes available."""
     if registry.landslide_model is None:
         raise RuntimeError("Landslide model not loaded -- check backend/ml_models/ for landslide_model(.pkl or _v2.pkl)")
 
@@ -172,9 +219,27 @@ def predict_landslide(elevation, slope, rainfall_7day_mm, vegetation, dist_to_wa
 
     X_scaled = registry.landslide_scaler.transform(X)
     pred_class = registry.landslide_model.predict(X_scaled)[0]
-    risk_level = registry.landslide_label_encoder.inverse_transform([pred_class])[0]
+    raw_risk_level = registry.landslide_label_encoder.inverse_transform([pred_class])[0]
     confidence = float(registry.landslide_model.predict_proba(X_scaled)[0].max())
-    return {"risk_level": risk_level, "confidence": confidence}
+
+    TIERS = ["Low", "Moderate", "High", "Critical"]
+    seasonal = seasonal_rainfall.get_seasonal_flood_factor()
+    factor = seasonal["factor"]
+    result = {"risk_level": raw_risk_level, "confidence": confidence}
+    if factor < 1.0 and raw_risk_level in TIERS:
+        raw_idx = TIERS.index(raw_risk_level)
+        calibrated_idx = round(raw_idx * factor)
+        calibrated_risk_level = TIERS[calibrated_idx]
+        if calibrated_risk_level != raw_risk_level:
+            result["risk_level"] = calibrated_risk_level
+            result["raw_model_risk_level"] = raw_risk_level
+            result["rainfall_calibration_applied"] = True
+            result["calibration_note"] = (
+                f"Terrain-based tier ({raw_risk_level}) scaled by a seasonal rainfall factor of "
+                f"{factor:.2f}, reused from the flood calibration (no dedicated multi-year "
+                f"landslide dataset available) -- {seasonal['note']}"
+            )
+    return result
 
 
 def predict_damage(pre_image_tensor, post_image_tensor):
