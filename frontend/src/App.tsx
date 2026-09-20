@@ -9,7 +9,7 @@ import NewsPage from './pages/NewsPage';
 import DamageAssessmentPage from './pages/DamageAssessmentPage';
 import SubmitPlacePage from './pages/SubmitPlacePage';
 import AdminReviewPage from './pages/AdminReviewPage';
-import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn, isAdmin as checkIsAdmin, adminLogout } from './lib/api';
+import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn, isAdmin as checkIsAdmin, adminLogout, fetchNews } from './lib/api';
 
 export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'analytics' | 'news' | 'damage' | 'submit' | 'admin';
 
@@ -52,6 +52,14 @@ export default function App() {
     }
     setIsLoggedIn(checkIsLoggedIn());
     setIsAdmin(checkIsAdmin());
+
+    // Fire on every app load (not just when the News tab is opened) so a visit is what
+    // checks for fresh news, rather than only the hourly scheduled job. The backend's
+    // GET /api/news itself decides whether the cache is actually stale enough to refresh
+    // (see routers/news.py's STALE_AFTER_MINUTES) -- this call is cheap even when nothing
+    // ends up refreshing, and we don't need its result here since NewsPage fetches its own
+    // copy when visited.
+    fetchNews().catch(() => {});
   }, []);
 
   const refs: Record<Page, React.RefObject<HTMLDivElement | null>> = {
