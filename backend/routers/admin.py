@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 
 from db.session import get_db
-from db.models import PlaceSubmission, Place
+from db.models import PlaceSubmission, Place, User
 from routers.auth import get_current_admin_required
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -16,8 +16,19 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 @router.get("/submissions")
 def list_pending_submissions(status: str = "pending", db: Session = Depends(get_db), _admin=Depends(get_current_admin_required)):
-    """Admin-only: list submissions pending (or in any given status) review."""
-    submissions = db.query(PlaceSubmission).filter(PlaceSubmission.status == status).all()
+    """Admin-only: list submissions pending (or in any given status) review.
+
+    LEFT OUTER JOINs to users so the submitter's actual email/name is returned -- previously
+    this only returned the raw submitted_by user ID, which is meaningless to an admin trying
+    to know WHO submitted something. LEFT (not inner) join because submitted_by is nullable
+    (a submission isn't required to be tied to a logged-in user), so anonymous submissions
+    still show up with submitter fields as null rather than being silently dropped."""
+    rows = (
+        db.query(PlaceSubmission, User)
+        .outerjoin(User, PlaceSubmission.submitted_by == User.id)
+        .filter(PlaceSubmission.status == status)
+        .all()
+    )
     return {
         "results": [
             {
@@ -25,8 +36,10 @@ def list_pending_submissions(status: str = "pending", db: Session = Depends(get_
                 "local_body": s.local_body,
                 "approx_lat": s.approx_lat, "approx_lon": s.approx_lon,
                 "submitted_by": s.submitted_by, "created_at": s.created_at,
+                "submitter_email": u.email if u else None,
+                "submitter_name": u.name if u else None,
             }
-            for s in submissions
+            for s, u in rows
         ]
     }
 

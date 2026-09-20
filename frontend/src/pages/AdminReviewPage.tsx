@@ -79,6 +79,11 @@ export default function AdminReviewPage() {
                     {s.place_type || 'unspecified type'} · {s.district || 'unspecified district'}
                     {s.local_body ? ` · ${s.local_body}` : ''}
                   </div>
+                  <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', marginTop: 4 }}>
+                    Submitted by: {s.submitter_name || s.submitter_email
+                      ? `${s.submitter_name || ''}${s.submitter_name && s.submitter_email ? ' · ' : ''}${s.submitter_email || ''}`
+                      : 'Anonymous / not logged in'}
+                  </div>
                 </div>
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>
                   {new Date(s.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}

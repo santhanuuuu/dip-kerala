@@ -6,7 +6,7 @@ from sqlalchemy import func, Integer
 import requests
 
 from db.session import get_db
-from db.models import Place, RiskQuery
+from db.models import Place, RiskQuery, NewsCache
 from routers.auth import get_current_user_optional
 from services import weather, inference
 
@@ -15,6 +15,12 @@ router = APIRouter(prefix="/api/risk", tags=["risk"])
 _ENDPOINT_CACHE_TTL = timedelta(minutes=10)
 _alerts_scan_cache: dict[tuple, tuple[datetime, dict]] = {}
 _district_ranking_cache: dict[tuple, tuple[datetime, dict]] = {}
+
+KERALA_DISTRICTS = [
+    "Thiruvananthapuram", "Kollam", "Pathanamthitta", "Alappuzha", "Kottayam",
+    "Idukki", "Ernakulam", "Thrissur", "Palakkad", "Malappuram",
+    "Kozhikode", "Wayanad", "Kannur", "Kasaragod",
+]
 
 
 def _get_endpoint_cache(cache: dict, key: tuple) -> dict | None:
@@ -32,15 +38,9 @@ def _set_endpoint_cache(cache: dict, key: tuple, data: dict) -> None:
 
 
 def _fetch_weather_for_places(places: list) -> dict:
-    """Fetches live weather for a list of place-like objects (needs .centroid_lat/.centroid_lon
-    or ["lat"]/["lon"]) with ONE batched Open-Meteo request instead of one request per place --
-    see weather.fetch_live_weather_batch's docstring for why this matters: fetching one place
-    at a time (even concurrently) reliably triggered Open-Meteo's rate limit, which silently
-    degraded every result to a generic seasonal-average rainfall number and made flood risk
-    look uniformly elevated regardless of actual current conditions.
-
-    Returns {place_index: weather_dict} -- always populated (weather.fetch_live_weather_batch
-    guarantees a result, real or climatological-fallback, for every coordinate given)."""
+    """Fetches live weather for a list of place-like objects with ONE batched Open-Meteo
+    request instead of one request per place (avoids the 429 rate-limiting that was
+    silently degrading every result to a generic seasonal-average rainfall number)."""
     def _get_lat_lon(p):
         if isinstance(p, dict):
             return p["lat"], p["lon"]
@@ -52,6 +52,62 @@ def _fetch_weather_for_places(places: list) -> dict:
         i: batch_results[weather._cache_key(lat, lon)]
         for i, (lat, lon) in enumerate(coords)
     }
+
+
+def _districts_with_recent_disaster_news(db: Session, hours: int = 72) -> set[str]:
+    """Real corroboration check: looks at the already-fetched Kerala flood/landslide news
+    cache (see services/news.py -- every cached article is already confirmed Kerala-related
+    AND genuinely disaster-related, that filtering happens at fetch time) and returns the set
+    of districts actually named in a recent article's title or description.
+
+    This is what lets risk stay elevated even when a place's own rainfall reading looks
+    moderate but there's real reported evidence of an active event nearby (e.g. upstream dam
+    release, delayed sensor data, or hyper-local rain Open-Meteo's grid doesn't fully capture)
+    -- and conversely, it's not what suppresses risk. The rainfall-based calibration in
+    inference.py handles the "it's not raining, so don't show high risk" direction on its own;
+    this only pulls risk back UP when there's actual corroborating news, never down further."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    articles = (
+        db.query(NewsCache)
+        .filter(NewsCache.published_at.isnot(None), NewsCache.published_at >= cutoff)
+        .all()
+    )
+    found = set()
+    for article in articles:
+        text = f"{article.title or ''} {article.description or ''}"
+        for district in KERALA_DISTRICTS:
+            if district.lower() in text.lower():
+                found.add(district)
+    return found
+
+
+def _apply_news_corroboration(result: dict, district: str | None, news_districts: set[str], is_flood: bool) -> dict:
+    """If this place's district has recent disaster news AND rainfall-based calibration was
+    applied (i.e. the raw model said something more severe than what got shown), restores the
+    raw/uncalibrated model output -- there's real reported evidence, so the model's original
+    read on terrain + rainfall shouldn't be second-guessed by the dry-conditions dampener."""
+    if not result.get("rainfall_calibration_applied"):
+        return result
+    if not district or district not in news_districts:
+        return result
+
+    result = dict(result)
+    if is_flood:
+        result["probability"] = result.pop("raw_model_probability")
+        result["risk_level"] = (
+            "HIGH" if result["probability"] > inference.FLOOD_RISK_HIGH
+            else "MODERATE" if result["probability"] > inference.FLOOD_RISK_MODERATE else "LOW"
+        )
+    else:
+        result["risk_level"] = result.pop("raw_model_risk_level")
+    result["rainfall_calibration_applied"] = False
+    result["news_corroboration_applied"] = True
+    result["calibration_note"] = (
+        f"Rainfall alone looked low, but recent news coverage mentions {district} district in "
+        "connection with flooding/landslides -- restored to the model's original assessment "
+        "rather than trusting the dry-conditions dampener over real reported evidence."
+    )
+    return result
 
 
 @router.get("/{place_name}")
@@ -93,6 +149,10 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
         vegetation=place.vegetation, dist_to_water_m=place.dist_to_water_m,
         soil_texture_class=place.soil_texture_class,
     )
+
+    news_districts = _districts_with_recent_disaster_news(db)
+    flood_result = _apply_news_corroboration(flood_result, place.district, news_districts, is_flood=True)
+    landslide_result = _apply_news_corroboration(landslide_result, place.district, news_districts, is_flood=False)
 
     accuracy = inference.get_accuracy_summary()
 
@@ -138,15 +198,9 @@ def get_area_risk(place_name: str, db: Session = Depends(get_db), user=Depends(g
 
 @router.get("/scan/alerts")
 def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = Depends(get_db)):
-    """Scans places for high flood risk. Intended to be called by a scheduled job (see
-    main.py), not on every page load -- exposed here so it can also be triggered manually
-    or tested directly.
-
-    Weather for ALL places is fetched in ONE batched Open-Meteo request (see
-    weather.fetch_live_weather_batch) -- previously fetching one place at a time reliably
-    triggered Open-Meteo's rate limit, silently degrading every result to a generic
-    seasonal-average rainfall figure and making flood risk look uniformly elevated even
-    during genuinely dry conditions."""
+    """Scans places for high flood risk. Weather for ALL places is fetched in ONE batched
+    Open-Meteo request; risk that gets dampened by low rainfall is restored where there's
+    real corroborating disaster news for that district."""
     cache_key = (threshold, limit)
     cached = _get_endpoint_cache(_alerts_scan_cache, cache_key)
     if cached is not None:
@@ -154,6 +208,7 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 
     places = db.query(Place).filter(Place.elevation.isnot(None)).limit(limit).all()
     weather_by_idx = _fetch_weather_for_places(places)
+    news_districts = _districts_with_recent_disaster_news(db)
 
     alerts = []
     for i, place in enumerate(places):
@@ -165,6 +220,7 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
             vegetation=place.vegetation, builtup=place.builtup,
             flow_accumulation=place.flow_accumulation,
         )
+        flood_result = _apply_news_corroboration(flood_result, place.district, news_districts, is_flood=True)
         if flood_result["probability"] > threshold:
             alerts.append({
                 "place": place.name, "district": place.district,
@@ -180,8 +236,7 @@ def scan_high_risk_areas(threshold: float = 0.7, limit: int = 50, db: Session = 
 @router.get("/districts/ranking")
 def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get_db)):
     """REAL computed ranking, not sample/mock numbers -- scans a handful of places per
-    district live, averages flood probability and landslide risk. Full responses are cached
-    for 10 minutes; every number is genuinely computed from the trained models."""
+    district live, averages flood probability and landslide risk."""
     cache_key = (limit_per_district,)
     cached = _get_endpoint_cache(_district_ranking_cache, cache_key)
     if cached is not None:
@@ -189,6 +244,7 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
 
     districts = [row[0] for row in db.query(Place.district).distinct().all()]
     landslide_score_map = {"Low": 25, "Moderate": 50, "High": 75, "Critical": 100}
+    news_districts = _districts_with_recent_disaster_news(db)
 
     district_places = {}
     for district in districts:
@@ -210,10 +266,8 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
                 }
                 for p in places
             ]
-    db.close()  # release the connection before the (potentially slow) weather batch call below
+    db.close()
 
-    # Flatten every district's places into one list so all weather for ALL districts is
-    # fetched in a SINGLE batched request, same reasoning as the alerts scan above.
     flat_places = [p for places in district_places.values() for p in places]
     weather_by_idx = _fetch_weather_for_places(flat_places)
 
@@ -231,12 +285,14 @@ def district_risk_ranking(limit_per_district: int = 3, db: Session = Depends(get
                 vegetation=place["vegetation"], builtup=place["builtup"],
                 flow_accumulation=place["flow_accumulation"],
             )
+            flood_result = _apply_news_corroboration(flood_result, district, news_districts, is_flood=True)
             landslide_result = inference.predict_landslide(
                 elevation=place["elevation"], slope=place["slope"],
                 rainfall_7day_mm=live_weather["rainfall_7day_mm"],
                 vegetation=place["vegetation"], dist_to_water_m=place["dist_to_water_m"],
                 soil_texture_class=place["soil_texture_class"],
             )
+            landslide_result = _apply_news_corroboration(landslide_result, district, news_districts, is_flood=False)
             flood_scores.append(flood_result["probability"] * 100)
             landslide_scores.append(landslide_score_map.get(landslide_result["risk_level"], 50))
         if not flood_scores:

@@ -228,6 +228,8 @@ export interface PendingSubmission {
   approx_lat: number | null;
   approx_lon: number | null;
   created_at: string;
+  submitter_email: string | null;
+  submitter_name: string | null;
 }
 
 export async function fetchPendingSubmissions(): Promise<PendingSubmission[]> {
