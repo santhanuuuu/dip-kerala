@@ -17,10 +17,18 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 def _looks_like_satellite_image(img: Image.Image) -> bool:
-    """Heuristic, not a trained classifier -- we don't have a labeled dataset of
-    'satellite vs not' to train one. Satellite/aerial imagery is a top-down (nadir) view,
-    so two things it essentially never contains are (a) visible sky and (b) a face/skin
-    filling much of the frame -- both are hallmarks of an ordinary ground-level photo.
+    """Heuristic, not a trained classifier -- we don't have a labeled 'satellite vs not'
+    dataset to train one. Three independent checks, any one of which rejects the image:
+
+    1. Skin tone: satellite/aerial imagery essentially never contains a face/skin filling
+       much of the frame.
+    2. Sky: a nadir (straight-down) satellite shot has no "up" -- visible sky is a
+       ground-level-photo signature.
+    3. Flat-row texture: satellite imagery has continuous natural texture (vegetation,
+       roads, buildings, water) almost everywhere. Screenshots, UI, code editors, and most
+       non-aerial digital images have large uniform-colored bands instead (e.g. a code
+       editor's solid dark background, a browser's title bar). This check catches exactly
+       that case -- it was the gap that let a VS Code screenshot through previously.
     """
     thumb = img.convert("RGB").resize((64, 64))
     arr = np.asarray(thumb).astype(np.int16)
@@ -44,7 +52,20 @@ def _looks_like_satellite_image(img: Image.Image) -> bool:
     sky_mask = (tb >= tr) & (brightness > 140) & ((t_max - t_min) < 40)
     sky_fraction = float(sky_mask.mean())
 
-    return skin_fraction <= 0.12 and sky_fraction <= 0.35
+    gray = np.asarray(img.convert("L").resize((128, 128))).astype(np.float32)
+    overall_std = float(gray.std())
+    row_std = gray.std(axis=1)
+    flat_row_fraction = float((row_std < 10).mean())
+
+    if skin_fraction > 0.12:
+        return False
+    if sky_fraction > 0.35:
+        return False
+    if overall_std < 8:  # near solid-color image
+        return False
+    if flat_row_fraction > 0.25:  # large uniform bands -- UI/screenshot/vector graphic
+        return False
+    return True
 
 
 def _preprocess_image(file_bytes: bytes):

@@ -359,3 +359,104 @@ export async function fetchDailyHistory(): Promise<{ results: DailyHistory[]; to
   if (!res.ok) return { results: [], totalAllTime: 0, note: 'Could not load history.' };
   return res.json();
 }
+
+// --- Shelters: typed, with client-side "nearest to me" support (haversine distance).
+// No public live-occupancy feed exists for Kerala shelters -- see the backend's own note,
+// surfaced in ShelterPage.tsx rather than hidden. ---
+export interface ShelterInfo {
+  name: string;
+  district: string;
+  capacity: number | null;
+  current_occupancy: number | null;
+  lat: number;
+  lon: number;
+  updated_at: string;
+}
+
+export async function fetchAllShelters(): Promise<{ results: ShelterInfo[]; note: string }> {
+  const res = await fetch(`${API_BASE}/api/shelters`);
+  if (!res.ok) return { results: [], note: 'Could not load shelters.' };
+  return res.json();
+}
+
+/** Haversine distance in km -- accurate enough for "which shelter is closest" ranking over
+ * Kerala's scale; no need for anything more precise than that here. */
+export function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function directionsUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
+}
+
+// --- Crowdsourced incident reports: fast, low-friction "seeing this right now" reports.
+// Always disclosed as unverified/community-reported -- never presented with the authority
+// of a model prediction. See backend/routers/incidents.py. ---
+export type IncidentType = 'flood' | 'landslide' | 'road_blocked' | 'other';
+
+export interface IncidentReport {
+  id: number;
+  incident_type: IncidentType;
+  description: string | null;
+  lat: number;
+  lon: number;
+  district: string | null;
+  status: string;
+  created_at: string;
+  reported_by_registered_user: boolean;
+}
+
+export async function submitIncidentReport(data: {
+  incident_type: IncidentType;
+  description?: string;
+  lat: number;
+  lon: number;
+}): Promise<{ id: number; status: string; district: string | null }> {
+  const res = await fetch(`${API_BASE}/api/incidents`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Could not submit report.');
+  }
+  return res.json();
+}
+
+export async function fetchRecentIncidents(hours = 48): Promise<{ results: IncidentReport[]; note: string }> {
+  const res = await fetch(`${API_BASE}/api/incidents?hours=${hours}`);
+  if (!res.ok) return { results: [], note: 'Could not load community reports.' };
+  return res.json();
+}
+
+// --- Dam water levels: real live data for dams KSEB/Irrigation Dept actually telemeter
+// (see backend/routers/dams.py); every other dam in the reference list is shown with static
+// details only, honestly labeled -- never a fabricated or estimated water level. ---
+export interface DamInfo {
+  name: string;
+  district: string;
+  river: string | null;
+  owner: string | null;
+  lat: number | null;
+  lon: number | null;
+  dam_type: string | null;
+  capacity_mcm: number | null;
+  frl_m: number | null;
+  has_live_data: boolean;
+  current_level_m: number | null;
+  storage_percentage: number | null;
+  last_updated: string | null;
+}
+
+export async function fetchDams(): Promise<{ results: DamInfo[]; note: string }> {
+  const res = await fetch(`${API_BASE}/api/dams`);
+  if (!res.ok) return { results: [], note: 'Could not load dam data.' };
+  return res.json();
+}

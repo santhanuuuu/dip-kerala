@@ -9,7 +9,7 @@ load_dotenv()  # reads backend/.env into os.environ -- must happen before any os
 from db.session import SessionLocal, engine
 from db.models import Base
 from services.news import refresh_news_cache
-from routers import places, risk, damage, auth, news, helplines, admin
+from routers import places, risk, damage, auth, news, helplines, admin, incidents, dams
 
 # Create tables if they don't exist yet. Safe to call on every startup -- it's a no-op
 # for tables that already exist. For production, prefer real Alembic migrations instead,
@@ -33,6 +33,8 @@ app.include_router(auth.router)
 app.include_router(news.router)
 app.include_router(helplines.router)
 app.include_router(admin.router)
+app.include_router(incidents.router)
+app.include_router(dams.router)
 
 
 def scheduled_news_refresh():

@@ -4,6 +4,9 @@ import HomePage from './pages/HomePage';
 import RiskManifestPage from './pages/RiskManifestPage';
 import DashboardPage from './pages/DashboardPage';
 import AlertsPage from './pages/AlertsPage';
+import DamsPage from './pages/DamsPage';
+import SheltersPage from './pages/SheltersPage';
+import IncidentsPage from './pages/IncidentsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import NewsPage from './pages/NewsPage';
 import DamageAssessmentPage from './pages/DamageAssessmentPage';
@@ -11,7 +14,11 @@ import SubmitPlacePage from './pages/SubmitPlacePage';
 import AdminReviewPage from './pages/AdminReviewPage';
 import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn, isAdmin as checkIsAdmin, adminLogout, fetchNews } from './lib/api';
 
-export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'analytics' | 'news' | 'damage' | 'submit' | 'admin';
+// NOTE: 'subscribe'/SubscribePage (SMS/WhatsApp alert signup) was wired in as a stub but never
+// actually built -- removed from here rather than shipping a fake page. That's a real,
+// separate feature (needs an SMS gateway like Twilio/MSG91) -- say the word if you want it
+// built and it can be added back properly, wired the same way as everything else here.
+export type Page = 'home' | 'manifest' | 'dashboard' | 'alerts' | 'dams' | 'shelters' | 'incidents' | 'analytics' | 'news' | 'damage' | 'submit' | 'admin';
 
 function SectionDivider({ label }: { label: string }) {
   return (
@@ -67,6 +74,9 @@ export default function App() {
     manifest: useRef(null),
     dashboard: useRef(null),
     alerts: useRef(null),
+    dams: useRef(null),
+    shelters: useRef(null),
+    incidents: useRef(null),
     analytics: useRef(null),
     news: useRef(null),
     damage: useRef(null),
@@ -98,42 +108,61 @@ export default function App() {
         onAdminLogout={handleAdminLogout}
       />
 
-      <div ref={refs.home} style={{ scrollMarginTop: 56, paddingTop: 56 }}>
+      {/* No top padding/offset needed anymore -- the sidebar is a fixed overlay that never
+          takes up layout space, unlike the old fixed top bar which pushed content down by
+          its height (56px). scrollMarginTop is kept small just so an anchor-scrolled-to
+          section doesn't land flush against the very top edge of the viewport. */}
+      <div ref={refs.home} style={{ scrollMarginTop: 16 }}>
         <HomePage navigate={navigate} />
       </div>
 
       <SectionDivider label="RISK MANIFEST" />
-      <div ref={refs.manifest} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.manifest} style={{ scrollMarginTop: 16 }}>
         <RiskManifestPage placeId={activePlaceId} navigate={navigate} />
       </div>
 
       <SectionDivider label="GIS DASHBOARD" />
-      <div ref={refs.dashboard} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.dashboard} style={{ scrollMarginTop: 16 }}>
         <DashboardPage navigate={navigate} />
       </div>
 
       <SectionDivider label="ACTIVE ALERTS" />
-      <div ref={refs.alerts} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.alerts} style={{ scrollMarginTop: 16 }}>
         <AlertsPage navigate={navigate} />
       </div>
 
+      <SectionDivider label="DAM WATER LEVELS" />
+      <div ref={refs.dams} style={{ scrollMarginTop: 16 }}>
+        <DamsPage />
+      </div>
+
+      <SectionDivider label="SHELTERS" />
+      <div ref={refs.shelters} style={{ scrollMarginTop: 16 }}>
+        <SheltersPage />
+      </div>
+
+      <SectionDivider label="COMMUNITY REPORTS" />
+      <div ref={refs.incidents} style={{ scrollMarginTop: 16 }}>
+        <IncidentsPage />
+      </div>
+
       <SectionDivider label="ANALYTICS" />
-      <div ref={refs.analytics} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.analytics} style={{ scrollMarginTop: 16 }}>
         <AnalyticsPage />
       </div>
 
       <SectionDivider label="NEWS" />
-      <div ref={refs.news} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.news} style={{ scrollMarginTop: 16 }}>
         <NewsPage />
       </div>
 
       <SectionDivider label="DAMAGE ASSESSMENT" />
-      <div ref={refs.damage} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.damage} style={{ scrollMarginTop: 16 }}>
         <DamageAssessmentPage />
       </div>
 
       <SectionDivider label="SUBMIT A PLACE" />
-      <div ref={refs.submit} style={{ scrollMarginTop: 56 }}>
+      <div ref={refs.submit} style={{ scrollMarginTop: 16 }}>
         <SubmitPlacePage isLoggedIn={isLoggedIn} />
       </div>
 
@@ -142,7 +171,7 @@ export default function App() {
       {isAdmin && (
         <>
           <SectionDivider label="ADMIN — REVIEW SUBMISSIONS" />
-          <div ref={refs.admin} style={{ scrollMarginTop: 56 }}>
+          <div ref={refs.admin} style={{ scrollMarginTop: 16 }}>
             <AdminReviewPage />
           </div>
         </>

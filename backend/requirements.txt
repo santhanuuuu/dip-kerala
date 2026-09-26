@@ -20,3 +20,4 @@ torch==2.3.0+cpu
 torchvision==0.18.0+cpu
 python-dotenv==1.0.1
 lightgbm==4.3.0
+pydantic==2.7.1

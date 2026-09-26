@@ -25,23 +25,14 @@ class Place(Base):
     centroid_lat = Column(Float)
     centroid_lon = Column(Float)
 
-    # Static terrain features -- copied in once from lsgd_feature_store.csv at seed time.
-    # These are NOT recomputed by the backend; Google Earth Engine produced them in Notebook 00.
     elevation = Column(Float)
     slope = Column(Float)
     dist_to_water_m = Column(Float)
     vegetation = Column(Float)
     builtup = Column(Float)
 
-    # Added for the v2 flood/landslide models (Notebook 05) -- from lsgd_feature_store_v2.csv.
-    # Nullable because places seeded from the older v1 feature store won't have these; the
-    # inference service falls back to the v1 models for any place missing them.
     flow_accumulation = Column(Float, nullable=True)
     soil_texture_class = Column(Float, nullable=True)
-    # True when the terrain values above are a district-average estimate rather than a
-    # site-specific GEE extraction -- set automatically when an admin approves a new
-    # submission (see routers/admin.py). Surfaced honestly in the UI rather than presented
-    # as precise data.
     terrain_is_estimated = Column(Boolean, default=False)
 
     is_verified = Column(Boolean, default=True)
@@ -95,35 +86,27 @@ class PlaceSubmission(Base):
     name = Column(String, nullable=False)
     place_type = Column(String)
     district = Column(String)
-    # Captures the parent Panchayat/Municipality/Corporation for a sub-LSGD locality or
-    # village -- matches the "Local_Body" concept already used in the ward-level feature
-    # store (kerala_wards_all.csv). Optional: only relevant when the submission is a
-    # locality within an existing LSGD rather than an LSGD itself.
     local_body = Column(String, nullable=True)
     approx_lat = Column(Float)
     approx_lon = Column(Float)
     submitted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    status = Column(String, default="pending")  # pending | approved | rejected
+    status = Column(String, default="pending")
     admin_notes = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 
 class EmergencyContact(Base):
-    """Seeded once from known KSDMA/district emergency numbers -- not auto-updated from any
-    live feed, since no public API for this exists. See services/helplines.py for details."""
     __tablename__ = "emergency_contacts"
 
     id = Column(Integer, primary_key=True)
     district = Column(String, nullable=False)
-    contact_type = Column(String, nullable=False)  # police | fire | disaster_management | ambulance | control_room
+    contact_type = Column(String, nullable=False)
     name = Column(String)
     phone_number = Column(String, nullable=False)
     updated_at = Column(TIMESTAMP, server_default=func.now())
 
 
 class Shelter(Base):
-    """Relief camp / shelter locations. No public live-updating source exists for this in
-    Kerala today -- see services/helplines.py for how this is seeded and refreshed."""
     __tablename__ = "shelters"
 
     id = Column(Integer, primary_key=True)
@@ -139,7 +122,6 @@ class Shelter(Base):
 
 
 class NewsCache(Base):
-    """Cached NewsAPI results, refreshed hourly by a scheduled job -- see services/news.py."""
     __tablename__ = "news_cache"
 
     id = Column(Integer, primary_key=True)
@@ -149,8 +131,64 @@ class NewsCache(Base):
     image_url = Column(String)
     source_name = Column(String)
     published_at = Column(TIMESTAMP)
-    # Set by services/news.py based on keyword matching -- lets Kerala-specific coverage
-    # surface first in a broader India-wide disaster feed without narrowing the query
-    # so much that the feed goes sparse.
     is_kerala = Column(Boolean, default=False)
     fetched_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class IncidentReport(Base):
+    """Crowdsourced 'I'm seeing this right now' reports -- distinct from PlaceSubmission
+    (proposes a new PLACE to add) and DamageAssessment (admin-triggered ML classification).
+    This is the fastest, lowest-friction path for anyone on the ground to flag something
+    happening in real time.
+
+    DELIBERATELY UNVERIFIED BY DEFAULT: official data (rainfall, terrain-based models) lags
+    reality; people nearby often know first. `status` supports future admin moderation, but
+    v1 shows everything as-submitted, clearly labeled "community-reported, unverified"
+    wherever displayed -- never presented with the same authority as a model prediction.
+
+    No photo upload in v1 -- same TODO pattern as DamageAssessment's images: needs real
+    object storage (S3/Cloud Storage), which is a deployment decision, not something to fake
+    with local disk storage that won't survive Render's ephemeral filesystem across restarts."""
+    __tablename__ = "incident_reports"
+
+    id = Column(Integer, primary_key=True)
+    incident_type = Column(String, nullable=False)  # flood | landslide | road_blocked | other
+    description = Column(Text, nullable=True)
+    lat = Column(Float, nullable=False)
+    lon = Column(Float, nullable=False)
+    place_id = Column(Integer, ForeignKey("places.id"), nullable=True)
+    district = Column(String, nullable=True)
+    reported_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String, default="unverified")  # unverified | verified | dismissed
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class Dam(Base):
+    """Static reference data for Kerala's dams -- NOT live water levels (those are fetched
+    live at request time from KSEB/Irrigation Dept feeds and merged in by routers/dams.py,
+    matched against `name` -- never stored here, since storing a live number would just go
+    stale). See db/seed_dams.py and dams_reference.csv for how this table is populated.
+
+    COVERAGE, STATED HONESTLY: only ~18 major KSEB hydro dams have a genuine live water-level
+    feed (confirmed via https://github.com/amith-vp/Kerala-Dam-Water-Levels, itself scraping
+    KSEB's own Dam Safety Organisation site) plus a further set from the Irrigation
+    Department's feed. Every other dam in Kerala -- including most of the small diversion
+    weirs -- has NO public live telemetry anywhere I could find. Those rows exist here for
+    reference (location, owner, river) with has_live_data=False, never a fabricated number."""
+    __tablename__ = "dams"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    district = Column(String, nullable=False)
+    river = Column(String, nullable=True)
+    owner = Column(String, nullable=True)  # e.g. "KSEB" | "Irrigation Department" | "Tamil Nadu PWD" (Mullaperiyar)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    reservoir_name = Column(String, nullable=True)
+    dam_type = Column(String, nullable=True)  # e.g. "Gravity", "Arch", "Earthen", "Rockfill"
+    capacity_mcm = Column(Float, nullable=True)  # gross/live storage capacity, million cubic metres
+    frl_m = Column(Float, nullable=True)  # Full Reservoir Level, metres
+    # Matches this dam's entry in the live KSEB/Irrigation feeds -- kept separate from `name`
+    # (the display name) since the feeds use inconsistent official naming (e.g. this app's
+    # "Mattupetty" vs the feed's "MADUPETTY").
+    live_feed_key = Column(String, nullable=True)
