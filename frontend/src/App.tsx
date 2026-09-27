@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Nav from './components/Nav';
+import useIsMobile from './hooks/useIsMobile';
 import HomePage from './pages/HomePage';
 import RiskManifestPage from './pages/RiskManifestPage';
 import DashboardPage from './pages/DashboardPage';
@@ -43,6 +44,7 @@ function SectionDivider({ label }: { label: string }) {
 }
 
 export default function App() {
+  const isMobile = useIsMobile(900); // must match the breakpoint Nav.tsx uses internally
   const [activePlaceId, setActivePlaceId] = useState<number>(1);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -97,7 +99,10 @@ export default function App() {
   };
 
   return (
-    <div style={{ background: '#F2F4EF' }}>
+    // The sidebar's collapsed rail (56px wide on desktop) is permanently on-screen now
+    // (that's the fix for the logo no longer fading with the rest of the nav), so content
+    // needs to clear it -- paddingLeft on desktop, paddingTop for the mobile top bar instead.
+    <div style={{ background: '#F2F4EF', paddingLeft: isMobile ? 0 : 56, paddingTop: isMobile ? 52 : 0 }}>
       <Nav
         navigate={navigate}
         isLoggedIn={isLoggedIn}

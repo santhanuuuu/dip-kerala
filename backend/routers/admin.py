@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 
 from db.session import get_db
-from db.models import PlaceSubmission, Place, User
+from db.models import PlaceSubmission, Place, User, Shelter
 from routers.auth import get_current_admin_required
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -122,5 +122,53 @@ def reject_submission(submission_id: int, admin_notes: str = "", db: Session = D
         raise HTTPException(status_code=404, detail="Submission not found")
     submission.status = "rejected"
     submission.admin_notes = admin_notes
+    db.commit()
+    return {"status": "rejected"}
+
+# --- Shelter submissions: separate review queue from place submissions, since a shelter
+# (school/hall proposed as a relief camp) is a fundamentally different kind of claim than a
+# missing town/panchayat -- see db/models.py's Shelter docstring for why this needs
+# verification before going public. ---
+
+@router.get("/shelter-submissions")
+def list_pending_shelters(status: str = "pending", db: Session = Depends(get_db), _admin=Depends(get_current_admin_required)):
+    rows = (
+        db.query(Shelter, User)
+        .outerjoin(User, Shelter.submitted_by == User.id)
+        .filter(Shelter.status == status)
+        .all()
+    )
+    return {
+        "results": [
+            {
+                "id": s.id, "name": s.name, "district": s.district,
+                "lat": s.lat, "lon": s.lon, "capacity": s.capacity,
+                "submitted_by": s.submitted_by, "updated_at": s.updated_at,
+                "submitter_email": u.email if u else None,
+                "submitter_name": u.name if u else None,
+            }
+            for s, u in rows
+        ]
+    }
+
+
+@router.post("/shelter-submissions/{shelter_id}/approve")
+def approve_shelter(shelter_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin_required)):
+    shelter = db.query(Shelter).filter(Shelter.id == shelter_id).first()
+    if not shelter:
+        raise HTTPException(status_code=404, detail="Shelter submission not found")
+    if shelter.status != "pending":
+        raise HTTPException(status_code=400, detail=f"Already {shelter.status}")
+    shelter.status = "verified"
+    db.commit()
+    return {"status": "verified"}
+
+
+@router.post("/shelter-submissions/{shelter_id}/reject")
+def reject_shelter(shelter_id: int, db: Session = Depends(get_db), _admin=Depends(get_current_admin_required)):
+    shelter = db.query(Shelter).filter(Shelter.id == shelter_id).first()
+    if not shelter:
+        raise HTTPException(status_code=404, detail="Shelter submission not found")
+    shelter.status = "rejected"
     db.commit()
     return {"status": "rejected"}

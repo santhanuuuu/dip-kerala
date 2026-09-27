@@ -107,6 +107,16 @@ class EmergencyContact(Base):
 
 
 class Shelter(Base):
+    """Relief camp / shelter locations. NO standing public dataset of 'every shelter in
+    Kerala' exists -- camps are designated by district authorities only once an emergency is
+    actually declared (confirmed: KSDMA has pre-identified ~3,071 candidate buildings
+    statewide, but no itemized public list with addresses/coordinates). Populated two ways:
+    (1) db/seed_shelters.py from a verified reference CSV an admin has manually compiled/
+    sourced, always status='verified'; (2) public user submissions via POST /api/shelters,
+    always status='pending' until an admin reviews them (see routers/admin.py) -- unlike
+    IncidentReport, this requires verification before going live, since sending someone to a
+    real physical location during an actual emergency is higher-stakes than an informational
+    unverified report."""
     __tablename__ = "shelters"
 
     id = Column(Integer, primary_key=True)
@@ -118,6 +128,8 @@ class Shelter(Base):
     is_active = Column(Boolean, default=True)
     lat = Column(Float)
     lon = Column(Float)
+    submitted_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String, default="verified")  # verified | pending | rejected
     updated_at = Column(TIMESTAMP, server_default=func.now())
 
 

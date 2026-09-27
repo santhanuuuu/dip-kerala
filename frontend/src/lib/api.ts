@@ -362,7 +362,7 @@ export async function fetchDailyHistory(): Promise<{ results: DailyHistory[]; to
 
 // --- Shelters: typed, with client-side "nearest to me" support (haversine distance).
 // No public live-occupancy feed exists for Kerala shelters -- see the backend's own note,
-// surfaced in ShelterPage.tsx rather than hidden. ---
+// surfaced in SheltersPage.tsx rather than hidden. ---
 export interface ShelterInfo {
   name: string;
   district: string;
@@ -376,6 +376,19 @@ export interface ShelterInfo {
 export async function fetchAllShelters(): Promise<{ results: ShelterInfo[]; note: string }> {
   const res = await fetch(`${API_BASE}/api/shelters`);
   if (!res.ok) return { results: [], note: 'Could not load shelters.' };
+  return res.json();
+}
+
+export async function submitShelter(data: { name: string; district: string; lat: number; lon: number; capacity?: number }): Promise<{ id: number; status: string; note: string }> {
+  const res = await fetch(`${API_BASE}/api/shelters`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Could not submit shelter. Are you logged in?');
+  }
   return res.json();
 }
 
@@ -444,8 +457,9 @@ export interface DamInfo {
   district: string;
   river: string | null;
   owner: string | null;
-  lat: number | null;
-  lon: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  reservoir_name: string | null;
   dam_type: string | null;
   capacity_mcm: number | null;
   frl_m: number | null;
@@ -459,4 +473,48 @@ export async function fetchDams(): Promise<{ results: DamInfo[]; note: string }>
   const res = await fetch(`${API_BASE}/api/dams`);
   if (!res.ok) return { results: [], note: 'Could not load dam data.' };
   return res.json();
+}
+
+// --- Admin: shelter submission review (separate queue from place submissions -- see
+// db/models.py's Shelter docstring for why shelters need verification before going public). ---
+export interface PendingShelter {
+  id: number;
+  name: string;
+  district: string;
+  lat: number;
+  lon: number;
+  capacity: number | null;
+  submitted_by: number | null;
+  updated_at: string;
+  submitter_email: string | null;
+  submitter_name: string | null;
+}
+
+export async function fetchPendingShelters(): Promise<PendingShelter[]> {
+  const res = await fetch(`${API_BASE}/api/admin/shelter-submissions`, { headers: adminAuthHeaders() });
+  if (!res.ok) throw new Error('Could not load shelter submissions. Are you still signed in as admin?');
+  const d = await res.json();
+  return d.results || [];
+}
+
+export async function approveShelter(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/shelter-submissions/${id}/approve`, {
+    method: 'POST',
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Approval failed.');
+  }
+}
+
+export async function rejectShelter(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/shelter-submissions/${id}/reject`, {
+    method: 'POST',
+    headers: adminAuthHeaders(),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || 'Rejection failed.');
+  }
 }

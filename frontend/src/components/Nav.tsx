@@ -29,6 +29,7 @@ const navItems: { page: Page; label: string; icon: string }[] = [
 
 const MUTED_ADMIN = '#8a9a9d';
 const SIDEBAR_WIDTH = 240;
+const RAIL_WIDTH = 56; // width of the always-visible collapsed rail holding just the logo
 
 function initials(name: string | null, email: string): string {
   if (name) {
@@ -38,7 +39,6 @@ function initials(name: string | null, email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
-/** Unchanged from the previous top-bar version -- just relocated into the sidebar footer. */
 function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; onLogin: () => void; onLogout: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -109,8 +109,6 @@ function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; o
   );
 }
 
-/** Unchanged logic from the previous version -- deliberately unobtrusive, never shows or
- * fills in the actual admin credentials anywhere in the UI. */
 function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: boolean; onAdminLoggedIn: () => void; onAdminLogout: () => void }) {
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
@@ -182,10 +180,11 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
   );
 }
 
-/** Claude-style auto-hide sidebar: collapsed to a thin edge strip at rest, expands on hover
- * (desktop) with a smooth fade+slide, so the header stops competing for attention with the
- * page content underneath it. On mobile (no hover), a small persistent toggle button opens/
- * closes the same panel as a tap target instead. */
+/** Claude-style auto-hide sidebar. FIX from the previous version: the logo is now in its own
+ * always-visible rail (never fades, never depends on hover state) -- only the nav items/auth
+ * controls panel expands and fades on hover. The logo itself is also a click target that
+ * jumps home, and hovering the rail (not just a thin 10px edge) opens the full panel, which
+ * is a more forgiving hover target than before. */
 export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, onAdminLoggedIn, onAdminLogout }: NavProps) {
   const isMobile = useIsMobile(900);
   const [hovered, setHovered] = useState(false);
@@ -201,71 +200,70 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
 
   return (
     <>
-      {/* Thin always-present edge strip -- the hover target on desktop, and a visible
-          affordance so it's discoverable rather than truly invisible. */}
+      {/* Always-visible rail: just the logo, permanently on screen regardless of hover state.
+          This is both the brand mark AND the hover trigger to open the full sidebar. */}
       {!isMobile && (
         <div
           onMouseEnter={() => setHovered(true)}
           style={{
-            position: 'fixed', top: 0, left: 0, bottom: 0, width: 10, zIndex: 999,
-            cursor: 'pointer',
+            position: 'fixed', top: 0, left: 0, bottom: 0, width: RAIL_WIDTH, zIndex: 1001,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 16,
+            background: expanded ? 'transparent' : 'rgba(242, 244, 239, 0.9)',
+            borderRight: expanded ? 'none' : '1px solid rgba(18, 38, 43, 0.08)',
+            transition: 'background 0.2s ease',
           }}
         >
-          <div style={{
-            position: 'absolute', top: 0, left: 0, bottom: 0, width: 3,
-            background: 'linear-gradient(180deg, rgba(31,111,100,0.35), rgba(31,111,100,0.1))',
-            opacity: expanded ? 0 : 1, transition: 'opacity 0.3s ease',
-          }} />
+          <button
+            onClick={() => goTo('home')}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, borderRadius: 6, overflow: 'hidden', lineHeight: 0 }}
+            aria-label="DIP/Kerala home"
+          >
+            <Logo size={32} />
+          </button>
         </div>
       )}
 
-      {/* Mobile toggle -- hover doesn't exist on touch, so this is a persistent tap target. */}
+      {/* Mobile toggle -- hover doesn't exist on touch, so this is a persistent tap target,
+          shown alongside a small always-visible logo mark too. */}
       {isMobile && (
-        <button
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-label="Menu"
-          style={{
-            position: 'fixed', top: 12, left: 12, zIndex: 1001,
-            width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: '#ffffff', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 6,
-            boxShadow: '0 2px 8px rgba(18,38,43,0.1)', cursor: 'pointer', color: '#12262B', fontSize: 16,
-          }}
-        >
-          {mobileOpen ? '✕' : '☰'}
-        </button>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 52, zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', background: 'rgba(242,244,239,0.95)', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
+          <button onClick={() => goTo('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 0 }} aria-label="DIP/Kerala home">
+            <Logo size={28} />
+          </button>
+          <button
+            onClick={() => setMobileOpen((o) => !o)}
+            aria-label="Menu"
+            style={{
+              width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: '#ffffff', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 6,
+              cursor: 'pointer', color: '#12262B', fontSize: 16,
+            }}
+          >
+            {mobileOpen ? '✕' : '☰'}
+          </button>
+        </div>
       )}
 
-      {/* The expanding panel itself -- overlays content, never pushes it (position: fixed,
-          not part of layout flow), so no page needs top/left padding to compensate for it. */}
+      {/* The expanding panel -- overlays content starting just past the logo rail, fades/
+          slides in on hover. Only THIS fades; the logo above is never part of it. */}
       <div
         onMouseEnter={() => !isMobile && setHovered(true)}
         onMouseLeave={() => !isMobile && setHovered(false)}
         style={{
-          position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 1000,
+          position: 'fixed', top: 0, bottom: 0, zIndex: 1000,
+          left: isMobile ? 0 : RAIL_WIDTH - 12, // slight overlap with the rail so there's no dead gap between them
           width: SIDEBAR_WIDTH,
           background: 'rgba(242, 244, 239, 0.98)', backdropFilter: 'blur(12px)',
           borderRight: '1px solid rgba(18, 38, 43, 0.12)',
           boxShadow: expanded ? '4px 0 24px rgba(18,38,43,0.12)' : 'none',
           display: 'flex', flexDirection: 'column',
-          padding: '20px 16px',
+          padding: isMobile ? '68px 16px 20px' : '20px 16px 20px 28px',
           opacity: expanded ? 1 : 0,
           transform: expanded ? 'translateX(0)' : 'translateX(-16px)',
           pointerEvents: expanded ? 'auto' : 'none',
           transition: 'opacity 0.22s ease, transform 0.22s ease',
         }}
       >
-        <button
-          onClick={() => goTo('home')}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 24 }}
-        >
-          <div style={{ width: 28, height: 28, borderRadius: 4, overflow: 'hidden', flexShrink: 0 }}>
-            <Logo size={28} />
-          </div>
-          <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 15, color: '#12262B', letterSpacing: '0.04em' }}>
-            DIP<span style={{ color: '#1F6F64' }}>/</span>Kerala
-          </span>
-        </button>
-
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {items.map(({ page, label, icon }) => (
             <button
