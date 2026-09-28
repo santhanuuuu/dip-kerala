@@ -1,14 +1,33 @@
 """
-weather.py -- fetches LIVE rainfall from Open-Meteo (free, no API key). Results are cached
-in-memory for 10 minutes per ~1km grid cell; terrain features are static and come from the
-database instead (seeded once from the GEE-derived feature store).
+weather.py -- fetches LIVE rainfall from Open-Meteo. Results are cached in-memory for 10
+minutes per ~1km grid cell; terrain features are static and come from the database instead
+(seeded once from the GEE-derived feature store).
+
+API KEY, WHY THIS MATTERS NOW: Open-Meteo's anonymous free tier rate-limits by IP address.
+Render's free-tier outbound IPs are SHARED across many unrelated customers' apps -- confirmed
+in production logs that even a single, first-of-the-day request now gets a 429, which means
+the shared IP's reputation is being exhausted by traffic this app has no control over, not by
+our own request volume. Batching/caching alone cannot fix a limit tripped by other tenants on
+the same IP. The real fix is a free Open-Meteo API key (https://open-meteo.com/en/pricing --
+the "Free" tier, no cost), which gets a DEDICATED per-key quota via their customer-api
+subdomain, completely decoupled from the shared-IP problem.
+
+Set OPEN_METEO_API_KEY in the environment once you have one. Until then, this falls back to
+the anonymous endpoint exactly as before -- so this change is safe to deploy immediately even
+before you've registered a key, and starts working fully the moment the key is added.
 """
+import os
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from datetime import date, timedelta, datetime, timezone
 
-OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_API_KEY = os.environ.get("OPEN_METEO_API_KEY", "")
+# Same request shape either way -- only the host and an added apikey param differ.
+OPEN_METEO_URL = (
+    "https://customer-api.open-meteo.com/v1/forecast" if OPEN_METEO_API_KEY
+    else "https://api.open-meteo.com/v1/forecast"
+)
 REQUEST_TIMEOUT = 15
 CACHE_TTL_SECONDS = 600
 
@@ -23,6 +42,19 @@ _retry = Retry(
 )
 _adapter = HTTPAdapter(max_retries=_retry)
 _session.mount("https://", _adapter)
+
+if OPEN_METEO_API_KEY:
+    print("weather.py: using Open-Meteo customer API (dedicated per-key quota)")
+else:
+    print("weather.py: OPEN_METEO_API_KEY not set -- using anonymous shared-IP endpoint, "
+          "which is known to be unreliable on Render's shared free-tier IPs. Register a free "
+          "key at https://open-meteo.com/en/pricing and set OPEN_METEO_API_KEY to fix this properly.")
+
+
+def _with_api_key(params: dict) -> dict:
+    if OPEN_METEO_API_KEY:
+        return {**params, "apikey": OPEN_METEO_API_KEY}
+    return params
 
 
 def _cache_key(lat: float, lon: float) -> tuple[float, float]:
@@ -43,14 +75,6 @@ def _fallback_weather(key: tuple[float, float]) -> dict:
     2. Any other cached location at all (rainfall over a ~1km grid is a reasonable proxy
        across a small state like Kerala for a short outage).
     3. A monthly climatological estimate for the current month, as an absolute last resort.
-
-    IMPORTANT CAVEAT: this climatological number is a coarse SEASONAL AVERAGE (e.g. "a typical
-    September week sees ~130mm across Kerala"), not today's actual rainfall. If the live fetch
-    keeps failing (see fetch_live_weather_batch, which is what the alerts scan uses to avoid
-    this in the first place), every place silently falls back to this same generic number
-    regardless of whether it's actually raining right now -- which can make flood risk look
-    uniformly elevated even during a genuinely dry spell. is_climatological_estimate=True
-    flags exactly this so callers/UI can disclose it honestly.
     """
     exact = _weather_cache.get(key)
     if exact is not None:
@@ -87,8 +111,7 @@ def _parse_entry(entry: dict) -> dict:
 
 
 def fetch_live_weather(lat: float, lon: float) -> dict:
-    """Single-location fetch, used by the individual place-search endpoint (infrequent,
-    one request at a time -- not the source of the 429 rate-limiting)."""
+    """Single-location fetch, used by the individual place-search endpoint."""
     key = _cache_key(lat, lon)
     now = datetime.now(timezone.utc)
     cached = _weather_cache.get(key)
@@ -99,7 +122,7 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
 
     end_date = date.today()
     start_date = end_date - timedelta(days=6)
-    params = {
+    params = _with_api_key({
         "latitude": lat,
         "longitude": lon,
         "start_date": start_date.isoformat(),
@@ -107,7 +130,7 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
         "daily": "precipitation_sum",
         "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
         "timezone": "auto",
-    }
+    })
 
     try:
         response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT)
@@ -124,20 +147,7 @@ def fetch_live_weather(lat: float, lon: float) -> dict:
 def fetch_live_weather_batch(coords: list[tuple[float, float]]) -> dict[tuple[float, float], dict]:
     """Fetches weather for MANY locations in ONE Open-Meteo request, using Open-Meteo's own
     support for comma-separated latitude/longitude lists, instead of one request per place.
-
-    THIS IS THE ACTUAL FIX for the alerts scan showing inflated/wrong flood risk: scanning
-    up to 50 places used to fire up to 50 separate requests (even spread across a small
-    thread pool), and Open-Meteo's free tier rate-limits that hard -- confirmed in Render's
-    logs as repeated "429 Too Many Requests" errors. Every one of those failures silently
-    fell back to a generic seasonal-average rainfall number (see _fallback_weather), which
-    is why places showed "high flood risk" even during an actual dry spell: the model was
-    reacting correctly to its rainfall input, but that input was a fake monsoon-average
-    figure, not today's real rainfall. Collapsing 50 requests into 1 avoids the rate limit
-    entirely instead of just retrying around it.
-
-    Returns a dict keyed by the SAME rounded (lat, lon) tuples _cache_key() would produce,
-    so callers look up results with _cache_key(lat, lon).
-    """
+    Returns a dict keyed by the SAME rounded (lat, lon) tuples _cache_key() would produce."""
     if not coords:
         return {}
 
@@ -154,14 +164,12 @@ def fetch_live_weather_batch(coords: list[tuple[float, float]]) -> dict[tuple[fl
                 continue
         to_fetch.append((lat, lon))
 
-    # De-duplicate identical rounded coordinates so the batch request (and Open-Meteo's
-    # per-request location limit) isn't wasted re-fetching the same grid cell twice.
     unique_to_fetch = list(dict.fromkeys(to_fetch))
 
     if unique_to_fetch:
         end_date = date.today()
         start_date = end_date - timedelta(days=6)
-        params = {
+        params = _with_api_key({
             "latitude": ",".join(str(lat) for lat, lon in unique_to_fetch),
             "longitude": ",".join(str(lon) for lat, lon in unique_to_fetch),
             "start_date": start_date.isoformat(),
@@ -169,13 +177,11 @@ def fetch_live_weather_batch(coords: list[tuple[float, float]]) -> dict[tuple[fl
             "daily": "precipitation_sum",
             "current": "temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m",
             "timezone": "auto",
-        }
+        })
         try:
             response = _session.get(OPEN_METEO_URL, params=params, timeout=REQUEST_TIMEOUT * 2)
             response.raise_for_status()
             data = response.json()
-            # Open-Meteo returns a LIST when multiple coordinates are requested, a plain
-            # dict when there's only one -- normalize to a list either way.
             entries = data if isinstance(data, list) else [data]
             for (lat, lon), entry in zip(unique_to_fetch, entries):
                 key = _cache_key(lat, lon)
@@ -189,7 +195,6 @@ def fetch_live_weather_batch(coords: list[tuple[float, float]]) -> dict[tuple[fl
                 if key not in results:
                     results[key] = _fallback_weather(key)
 
-    # Ensure every originally-requested coordinate has an entry, even duplicates.
     for lat, lon in coords:
         key = _cache_key(lat, lon)
         if key not in results:
