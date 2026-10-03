@@ -26,6 +26,11 @@ with engine.connect() as conn:
     conn.execute(text("ALTER TABLE shelters ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)"))
     conn.execute(text("ALTER TABLE shelters ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'verified'"))
     conn.execute(text("UPDATE shelters SET status = 'verified' WHERE status IS NULL"))
+    # Dam redesign (filter tabs + persisted "last known" reading so a dam never goes blank
+    # just because today's live-feed fetch missed it) -- same safely-rerunnable pattern.
+    conn.execute(text("ALTER TABLE dams ADD COLUMN IF NOT EXISTS last_known_level_m FLOAT"))
+    conn.execute(text("ALTER TABLE dams ADD COLUMN IF NOT EXISTS last_known_storage_percentage FLOAT"))
+    conn.execute(text("ALTER TABLE dams ADD COLUMN IF NOT EXISTS last_known_updated_at VARCHAR"))
     conn.commit()
 
 app = FastAPI(title="Disaster Intelligence Platform (DIP) API")

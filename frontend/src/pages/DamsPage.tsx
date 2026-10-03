@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { fetchDams, type DamInfo } from '../lib/api';
+import { fetchDams, type DamInfo, type DamRiskCategory } from '../lib/api';
 
 const MUTED = '#4a5e62';
 
@@ -18,6 +18,18 @@ function statusLabel(pct: number | null): string {
   return 'SAFE';
 }
 
+function timeAgo(iso: string | null): string {
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return iso; // feed's raw string wasn't parseable -- show it as-is rather than "Invalid Date"
+  const diffMs = Date.now() - t;
+  const hrs = Math.floor(diffMs / 3_600_000);
+  if (hrs < 1) return 'Just now';
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
 function SpecRow({ label, value }: { label: string; value: string | number | null }) {
   if (value === null || value === undefined || value === '') return null;
   return (
@@ -28,11 +40,13 @@ function SpecRow({ label, value }: { label: string; value: string | number | nul
   );
 }
 
-/** Slide-up detail panel for one dam -- opened by tapping its row in the compact list.
- * Deliberately a simple fixed overlay (no extra dependency) matching this app's existing
- * inline-style conventions. */
+/** Full-detail slide-up panel for one dam -- opened by tapping its tile. Deliberately a
+ * simple fixed overlay (no extra dependency) matching this app's existing inline-style
+ * conventions. Shows the "last updated" timestamp unconditionally, whether the reading is
+ * live right now or a persisted last-known value. */
 function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
-  const color = dam.has_live_data ? statusColor(dam.storage_percentage) : MUTED;
+  const hasAnyReading = dam.storage_percentage !== null;
+  const color = hasAnyReading ? statusColor(dam.storage_percentage) : MUTED;
   return (
     <div
       onClick={onClose}
@@ -49,11 +63,18 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
           <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 20, color: '#12262B' }}>{dam.name}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20, color: MUTED, padding: 4, lineHeight: 1 }}>✕</button>
         </div>
-        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 16 }}>
-          {dam.has_live_data ? `● ${statusLabel(dam.storage_percentage)}` : 'NO LIVE DATA'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color, fontWeight: 700, letterSpacing: '0.06em' }}>
+            {hasAnyReading ? `● ${statusLabel(dam.storage_percentage)}` : 'NO LIVE DATA'}
+          </span>
+          {hasAnyReading && !dam.is_live_today && (
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#8a6216', background: 'rgba(217,154,43,0.12)', padding: '2px 6px', borderRadius: 1, fontWeight: 600 }}>
+              LAST KNOWN
+            </span>
+          )}
         </div>
 
-        {dam.has_live_data && (
+        {hasAnyReading && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ height: 8, background: 'rgba(18,38,43,0.08)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(dam.storage_percentage ?? 0, 100)}%`, background: color }} />
@@ -76,13 +97,62 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
           <SpecRow label="Coordinates" value={dam.latitude && dam.longitude ? `${dam.latitude.toFixed(4)}, ${dam.longitude.toFixed(4)}` : null} />
         </div>
 
-        {dam.has_live_data && dam.last_updated && (
-          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, marginTop: 12 }}>
-            Updated {dam.last_updated}
-          </div>
-        )}
+        {/* Last-updated is shown for EVERY dam, live or not -- a dam with no reading at all
+            (never had live telemetry) has nothing to show here, which is itself honest. */}
+        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, marginTop: 12 }}>
+          {dam.last_updated
+            ? `Details last updated ${timeAgo(dam.last_updated)}`
+            : 'No live reading has ever been recorded for this dam.'}
+        </div>
       </div>
     </div>
+  );
+}
+
+const TABS: { key: DamRiskCategory; label: string }[] = [
+  { key: 'high', label: 'High Risk' },
+  { key: 'normal', label: 'Normal' },
+  { key: 'no_live_data', label: 'No Live Data' },
+];
+
+/** One square tile in the grid -- name, status color, % (or a last-known/no-data badge), and
+ * a last-updated stamp, always visible so staleness is never hidden. */
+function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
+  const hasAnyReading = dam.storage_percentage !== null;
+  const color = hasAnyReading ? statusColor(dam.storage_percentage) : 'rgba(18,38,43,0.25)';
+  return (
+    <button
+      onClick={onOpen}
+      style={{
+        display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+        aspectRatio: '1 / 1', width: '100%', textAlign: 'left', cursor: 'pointer',
+        padding: 14, background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)',
+        borderTop: `4px solid ${color}`, borderRadius: 4,
+      }}
+    >
+      <div>
+        <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 14, color: '#12262B', lineHeight: 1.25 }}>
+          {dam.name}
+        </div>
+        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, marginTop: 2 }}>{dam.district}</div>
+      </div>
+
+      <div>
+        {hasAnyReading ? (
+          <>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 20, color, fontWeight: 700, lineHeight: 1 }}>
+              {dam.storage_percentage!.toFixed(0)}%
+            </div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, marginTop: 4 }}>
+              {!dam.is_live_today && <span style={{ color: '#8a6216', fontWeight: 600 }}>LAST KNOWN · </span>}
+              {dam.last_updated ? `Updated ${timeAgo(dam.last_updated)}` : ''}
+            </div>
+          </>
+        ) : (
+          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>NO LIVE DATA</div>
+        )}
+      </div>
+    </button>
   );
 }
 
@@ -90,8 +160,7 @@ export default function DamsPage() {
   const [dams, setDams] = useState<DamInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState('');
-  const [districtFilter, setDistrictFilter] = useState<string>('ALL');
-  const [liveOnly, setLiveOnly] = useState(false);
+  const [tab, setTab] = useState<DamRiskCategory>('high');
   const [selected, setSelected] = useState<DamInfo | null>(null);
 
   useEffect(() => {
@@ -103,40 +172,37 @@ export default function DamsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const districts = useMemo(() => Array.from(new Set(dams.map((d) => d.district))).sort(), [dams]);
+  const counts = useMemo(() => ({
+    high: dams.filter((d) => d.risk_category === 'high').length,
+    normal: dams.filter((d) => d.risk_category === 'normal').length,
+    no_live_data: dams.filter((d) => d.risk_category === 'no_live_data').length,
+  }), [dams]);
 
-  // Dams currently in DANGER float to the top regardless of alphabetical/district order --
-  // the whole point of "should show as red when it needs to" is that it's the first thing
-  // you see, not something you have to scroll to find.
-  const filtered = useMemo(() => {
+  // Within a tab, dams closest to DANGER still float to the top -- the point of color-coding
+  // is that the most urgent one is the first thing you see, not something to scroll for.
+  const tabDams = useMemo(() => {
     return dams
-      .filter((d) => (districtFilter === 'ALL' || d.district === districtFilter) && (!liveOnly || d.has_live_data))
-      .sort((a, b) => {
-        const aPct = a.has_live_data ? (a.storage_percentage ?? -1) : -2;
-        const bPct = b.has_live_data ? (b.storage_percentage ?? -1) : -2;
-        return bPct - aPct;
-      });
-  }, [dams, districtFilter, liveOnly]);
+      .filter((d) => d.risk_category === tab)
+      .sort((a, b) => (b.storage_percentage ?? -1) - (a.storage_percentage ?? -1));
+  }, [dams, tab]);
 
-  const liveCount = dams.filter((d) => d.has_live_data).length;
-  const dangerCount = dams.filter((d) => d.has_live_data && (d.storage_percentage ?? 0) >= 90).length;
+  // Default to a tab that actually has something in it, the first time data loads.
+  useEffect(() => {
+    if (!loading && dams.length > 0 && counts.high === 0) {
+      setTab(counts.normal > 0 ? 'normal' : 'no_live_data');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   return (
     <div style={{ minHeight: '100vh', background: '#F2F4EF' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px' }}>
+      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 64px' }}>
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>
           DAM WATER LEVELS
         </div>
         <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 28, color: '#12262B', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
           Kerala Dams
         </h1>
-        {!loading && dams.length > 0 && (
-          <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: '0 0 20px' }}>
-            {liveCount} of {dams.length} have live data
-            {dangerCount > 0 && <span style={{ color: '#B54A2A', fontWeight: 600 }}> · {dangerCount} in DANGER range</span>}
-            . Tap a dam for full details.
-          </p>
-        )}
 
         {loading && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading…</div>}
 
@@ -154,82 +220,45 @@ export default function DamsPage() {
         {!loading && dams.length > 0 && (
           <>
             {note && (
-              <div style={{ padding: '10px 16px', marginBottom: 20, background: 'rgba(217,154,43,0.08)', border: '1px solid rgba(217,154,43,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 12, color: '#8a6216' }}>
+              <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: '0 0 20px' }}>
                 {note}
-              </div>
+              </p>
             )}
 
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 16, alignItems: 'center' }}>
-              <select
-                value={districtFilter}
-                onChange={(e) => setDistrictFilter(e.target.value)}
-                style={{ padding: '8px 12px', borderRadius: 2, border: '1px solid rgba(18,38,43,0.2)', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#12262B', background: '#ffffff' }}
-              >
-                <option value="ALL">All Districts</option>
-                {districts.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => setLiveOnly((v) => !v)}
-                style={{
-                  padding: '8px 16px', borderRadius: 2, cursor: 'pointer',
-                  fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, fontWeight: 600,
-                  background: liveOnly ? '#1F6F64' : '#ffffff',
-                  color: liveOnly ? '#F2F4EF' : MUTED,
-                  border: `1px solid ${liveOnly ? '#1F6F64' : 'rgba(18,38,43,0.2)'}`,
-                }}
-              >
-                ● Live data only
-              </button>
-            </div>
-
-            {filtered.length === 0 && (
-              <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
-                No dams match this filter.
-              </div>
-            )}
-
-            {/* Compact list -- one short row per dam, name + district + a colored status dot.
-                Tap opens the full spec sheet instead of always showing it inline, which is
-                what was making the page enormous with ~69 dams all expanded at once. */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {filtered.map((d, i) => {
-                const color = d.has_live_data ? statusColor(d.storage_percentage) : 'rgba(18,38,43,0.2)';
+            {/* Filter tabs -- High Risk / Normal / No Live Data, each with a live count. */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 20 }}>
+              {TABS.map((t) => {
+                const active = tab === t.key;
+                const tabColor = t.key === 'high' ? '#B54A2A' : t.key === 'normal' ? '#1F6F64' : MUTED;
                 return (
                   <button
-                    key={i}
-                    onClick={() => setSelected(d)}
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                      width: '100%', textAlign: 'left', cursor: 'pointer',
-                      padding: '12px 16px', background: '#ffffff',
-                      border: '1px solid rgba(18,38,43,0.08)', borderLeft: `4px solid ${color}`,
-                      borderRadius: 2,
+                      padding: '10px 18px', borderRadius: 2, cursor: 'pointer',
+                      fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, fontWeight: 600,
+                      background: active ? tabColor : '#ffffff',
+                      color: active ? '#ffffff' : MUTED,
+                      border: `1px solid ${active ? tabColor : 'rgba(18,38,43,0.2)'}`,
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 14, color: '#12262B', whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {d.name}
-                        </div>
-                        <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>{d.district}</div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                      {d.has_live_data ? (
-                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color, fontWeight: 700 }}>
-                          {d.storage_percentage !== null ? `${d.storage_percentage.toFixed(0)}%` : statusLabel(null)}
-                        </span>
-                      ) : (
-                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED }}>NO DATA</span>
-                      )}
-                      <span style={{ color: MUTED, fontSize: 12 }}>›</span>
-                    </div>
+                    {t.label.toUpperCase()} · {counts[t.key]}
                   </button>
                 );
               })}
+            </div>
+
+            {tabDams.length === 0 && (
+              <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
+                No dams in this category.
+              </div>
+            )}
+
+            {/* Square tile grid -- tap any tile for full details. */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+              {tabDams.map((d, i) => (
+                <DamTile key={i} dam={d} onOpen={() => setSelected(d)} />
+              ))}
             </div>
           </>
         )}

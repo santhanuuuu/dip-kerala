@@ -452,6 +452,8 @@ export async function fetchRecentIncidents(hours = 48): Promise<{ results: Incid
 // --- Dam water levels: real live data for dams KSEB/Irrigation Dept actually telemeter
 // (see backend/routers/dams.py); every other dam in the reference list is shown with static
 // details only, honestly labeled -- never a fabricated or estimated water level. ---
+export type DamRiskCategory = 'high' | 'normal' | 'no_live_data';
+
 export interface DamInfo {
   name: string;
   district: string;
@@ -463,13 +465,22 @@ export interface DamInfo {
   dam_type: string | null;
   capacity_mcm: number | null;
   frl_m: number | null;
+  /** True only if this dam has a fresh reading from TODAY's feed fetch. */
   has_live_data: boolean;
+  /** Same as has_live_data -- kept for clarity alongside is_stale-style fields elsewhere. */
+  is_live_today: boolean;
+  /** Best available reading -- live if is_live_today, otherwise the last confirmed reading
+   * on record for this dam (never a fabricated/estimated value). Null if this dam has never
+   * had a live reading at all. */
   current_level_m: number | null;
   storage_percentage: number | null;
+  /** When current_level_m/storage_percentage were actually recorded -- shown on every dam
+   * tile regardless of live/last-known status. Null only if never recorded. */
   last_updated: string | null;
+  risk_category: DamRiskCategory;
 }
 
-export async function fetchDams(): Promise<{ results: DamInfo[]; note: string }> {
+export async function fetchDams(): Promise<{ results: DamInfo[]; note: string; counts?: Record<DamRiskCategory, number> }> {
   const res = await fetch(`${API_BASE}/api/dams`);
   if (!res.ok) return { results: [], note: 'Could not load dam data.' };
   return res.json();

@@ -204,3 +204,14 @@ class Dam(Base):
     # (the display name) since the feeds use inconsistent official naming (e.g. this app's
     # "Mattupetty" vs the feed's "MADUPETTY").
     live_feed_key = Column(String, nullable=True)
+
+    # PERSISTED last-known reading -- written by routers/dams.py every time the live feed
+    # genuinely has fresh data for this dam. When today's feed fetch has nothing for a dam
+    # (feed down, or this dam dropped out of coverage that day), the API falls back to these
+    # columns instead of returning a blank -- still clearly labeled as "last known", with its
+    # own real timestamp, never silently presented as live. A dam that has NEVER had a live
+    # reading keeps these all NULL -- that's the honest "no live data" case, distinct from "had
+    # data before, feed just hiccuped today".
+    last_known_level_m = Column(Float, nullable=True)
+    last_known_storage_percentage = Column(Float, nullable=True)
+    last_known_updated_at = Column(String, nullable=True)  # the feed's own "lastUpdate" string
