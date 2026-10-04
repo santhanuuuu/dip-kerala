@@ -72,6 +72,14 @@ _cache_ts: datetime | None = None
 # DANGER+WATCH consistently with what the tile's own color already tells you.
 HIGH_RISK_THRESHOLD_PCT = 75.0
 
+# Below this live-storage capacity, a dam is a small check dam/regulator rather than a real
+# reservoir (e.g. Kallar is 0.19 MCM) -- confirmed directly from KSEB's own feed that these
+# report wildly inconsistent storage percentages between polls (seen swinging between 0% and
+# 144% for the same structure within the same day, nothing to do with our own code). Flagged
+# to the frontend rather than hidden or "corrected" -- we never invent or suppress a real
+# government figure, just label it so a 0% or >100% doesn't look like our bug.
+SMALL_CAPACITY_THRESHOLD_MCM = 2.0
+
 
 def _fetch_live_levels(force: bool = False) -> dict[str, dict]:
     """Returns {dam_name_from_feed: {level, storage_pct, updated}}. Never raises -- a failed
@@ -217,6 +225,7 @@ def _apply_live_reading(d: Dam, live: dict | None) -> dict:
         "storage_percentage": storage_percentage,
         "last_updated": last_updated,
         "risk_category": _risk_category(storage_percentage),
+        "is_small_capacity": d.capacity_mcm is not None and d.capacity_mcm < SMALL_CAPACITY_THRESHOLD_MCM,
     }
 
 

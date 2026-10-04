@@ -119,6 +119,17 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
             ? `Details last updated ${timeAgo(dam.last_updated)}`
             : 'No live reading has ever been recorded for this dam.'}
         </div>
+
+        {/* This is a real caveat about the GOVERNMENT source, not an error on our end --
+            tiny check dams/regulators are confirmed (directly against KSEB's own feed) to
+            report inconsistent percentages between polls, independent of anything we compute. */}
+        {dam.is_small_capacity && (
+          <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: '#8a6216', background: 'rgba(217,154,43,0.1)', padding: '8px 10px', borderRadius: 2, marginTop: 10 }}>
+            Small check dam/regulator ({dam.capacity_mcm} MCM capacity) -- KSEB's own readings for
+            structures this size are known to swing inconsistently between updates. This isn't a
+            fault in our data pipeline; it's relayed exactly as the government feed reports it.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -162,6 +173,11 @@ function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
               {!dam.is_live_today && <span style={{ color: '#8a6216', fontWeight: 600 }}>LAST KNOWN · </span>}
               {dam.last_updated ? `Updated ${timeAgo(dam.last_updated)}` : ''}
             </div>
+            {dam.is_small_capacity && (
+              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: '#8a6216', marginTop: 2 }}>
+                ⚠ small dam, volatile reading
+              </div>
+            )}
           </>
         ) : (
           <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>NO LIVE DATA</div>

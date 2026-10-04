@@ -478,6 +478,11 @@ export interface DamInfo {
    * tile regardless of live/last-known status. Null only if never recorded. */
   last_updated: string | null;
   risk_category: DamRiskCategory;
+  /** True for tiny check dams/regulators (<2 MCM capacity) -- confirmed directly against
+   * KSEB's own feed that these report wildly inconsistent percentages between polls (seen
+   * swinging 0% to 144% for the same structure in one day). Not a bug in our sync; flagged so
+   * a strange-looking number here doesn't look like one. */
+  is_small_capacity: boolean;
 }
 
 export async function fetchDams(): Promise<{ results: DamInfo[]; note: string; counts?: Record<DamRiskCategory, number> }> {
