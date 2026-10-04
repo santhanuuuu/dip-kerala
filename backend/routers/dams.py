@@ -143,10 +143,22 @@ def _parse_feed_date(s: str | None) -> datetime | None:
 FRESHNESS_WINDOW = timedelta(hours=36)
 
 
-def _risk_category(storage_pct: float | None) -> str:
-    if storage_pct is None:
-        return "no_live_data"
-    return "high" if storage_pct >= HIGH_RISK_THRESHOLD_PCT else "normal"
+def _risk_category(current_level_m: float | None, storage_pct: float | None) -> str:
+    """"No live data" means NO READING AT ALL has ever existed -- not merely "no percentage".
+    Several barrages/regulators (Bhoothathankettu, Malankara, Pazhassi, Chulliyar, Kuttiyadi,
+    Kallada, Moolathara) report a perfectly real water LEVEL every day but structurally never
+    report a "% of reservoir full" (the feed gives "-" for that field -- there's no FRL-style
+    capacity figure for a barrage). Keying risk_category on storage_pct alone was dumping these
+    into "no_live_data" even on days they had a completely fresh level reading -- confirmed
+    directly against the database (e.g. Bhoothathankettu had last_known_level_m=34.1 dated
+    today, with last_known_storage_percentage=null, and was still showing "NO LIVE DATA")."""
+    if storage_pct is not None:
+        return "high" if storage_pct >= HIGH_RISK_THRESHOLD_PCT else "normal"
+    if current_level_m is not None:
+        # A real level reading exists, just no %-based figure -- not assessable as high-risk,
+        # but definitely not "no data" either.
+        return "normal"
+    return "no_live_data"
 
 
 def _to_float(v) -> float | None:
@@ -224,7 +236,7 @@ def _apply_live_reading(d: Dam, live: dict | None) -> dict:
         "current_level_m": current_level_m,
         "storage_percentage": storage_percentage,
         "last_updated": last_updated,
-        "risk_category": _risk_category(storage_percentage),
+        "risk_category": _risk_category(current_level_m, storage_percentage),
         "is_small_capacity": d.capacity_mcm is not None and d.capacity_mcm < SMALL_CAPACITY_THRESHOLD_MCM,
     }
 

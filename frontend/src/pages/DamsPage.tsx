@@ -60,8 +60,14 @@ function SpecRow({ label, value }: { label: string; value: string | number | nul
  * conventions. Shows the "last updated" timestamp unconditionally, whether the reading is
  * live right now or a persisted last-known value. */
 function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
-  const hasAnyReading = dam.storage_percentage !== null;
-  const color = hasAnyReading ? statusColor(dam.storage_percentage) : MUTED;
+  // A dam can have a real reading with NO percentage -- barrages/regulators (Bhoothathankettu,
+  // Malankara, Pazhassi, Chulliyar, Kuttiyadi, Kallada, Moolathara) report a genuine water
+  // LEVEL every day but structurally never report "% of reservoir full" (no FRL-style capacity
+  // figure applies to a barrage). Treating storage_percentage===null as "no data" was hiding a
+  // completely real, fresh level reading behind "NO LIVE DATA".
+  const hasPct = dam.storage_percentage !== null;
+  const hasAnyReading = hasPct || dam.current_level_m !== null;
+  const color = hasPct ? statusColor(dam.storage_percentage) : hasAnyReading ? '#1F6F64' : MUTED;
   return (
     <div
       onClick={onClose}
@@ -80,7 +86,7 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color, fontWeight: 700, letterSpacing: '0.06em' }}>
-            {hasAnyReading ? `● ${statusLabel(dam.storage_percentage)}` : 'NO LIVE DATA'}
+            {hasPct ? `● ${statusLabel(dam.storage_percentage)}` : hasAnyReading ? '● LEVEL RECORDED' : 'NO LIVE DATA'}
           </span>
           {hasAnyReading && !dam.is_live_today && (
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#8a6216', background: 'rgba(217,154,43,0.12)', padding: '2px 6px', borderRadius: 1, fontWeight: 600 }}>
@@ -89,14 +95,25 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
           )}
         </div>
 
-        {hasAnyReading && (
+        {hasPct && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ height: 8, background: 'rgba(18,38,43,0.08)', borderRadius: 4, overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${Math.min(dam.storage_percentage ?? 0, 100)}%`, background: color }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED, marginTop: 6 }}>
-              <span>{dam.storage_percentage !== null ? `${dam.storage_percentage.toFixed(1)}% full` : ''}</span>
+              <span>{dam.storage_percentage!.toFixed(1)}% full</span>
               <span>{dam.current_level_m !== null ? `${dam.current_level_m} m` : ''}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Level-only reading (no %): a barrage/regulator with no FRL-style capacity figure to
+            compute a percentage against -- still a real, fresh government reading. */}
+        {!hasPct && hasAnyReading && (
+          <div style={{ marginBottom: 16, fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: '#12262B' }}>
+            Water level: <strong>{dam.current_level_m} m</strong>
+            <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: MUTED, marginTop: 2 }}>
+              This structure doesn't report a "% full" figure (typical for a barrage/regulator).
             </div>
           </div>
         )}
@@ -144,8 +161,12 @@ const TABS: { key: DamRiskCategory; label: string }[] = [
 /** One square tile in the grid -- name, status color, % (or a last-known/no-data badge), and
  * a last-updated stamp, always visible so staleness is never hidden. */
 function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
-  const hasAnyReading = dam.storage_percentage !== null;
-  const color = hasAnyReading ? statusColor(dam.storage_percentage) : 'rgba(18,38,43,0.25)';
+  // Same fix as DamDetail -- a barrage/regulator can have a real level reading with no %
+  // figure at all (structurally, not a gap in our data), so "no reading" must check BOTH
+  // fields, not just storage_percentage.
+  const hasPct = dam.storage_percentage !== null;
+  const hasAnyReading = hasPct || dam.current_level_m !== null;
+  const color = hasPct ? statusColor(dam.storage_percentage) : hasAnyReading ? '#1F6F64' : 'rgba(18,38,43,0.25)';
   return (
     <button
       onClick={onOpen}
@@ -167,7 +188,7 @@ function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
         {hasAnyReading ? (
           <>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 20, color, fontWeight: 700, lineHeight: 1 }}>
-              {dam.storage_percentage!.toFixed(0)}%
+              {hasPct ? `${dam.storage_percentage!.toFixed(0)}%` : `${dam.current_level_m} m`}
             </div>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, marginTop: 4 }}>
               {!dam.is_live_today && <span style={{ color: '#8a6216', fontWeight: 600 }}>LAST KNOWN · </span>}
