@@ -18,10 +18,25 @@ function statusLabel(pct: number | null): string {
   return 'SAFE';
 }
 
+/** KSEB/Irrigation feed timestamps come as "DD.MM.YYYY" (e.g. "03.10.2026") -- day first, NOT
+ * the US month-first order. `new Date()` guesses month-first for an ambiguous string like
+ * this, which silently produced wildly wrong "time ago" labels (a genuine ~2-month-old
+ * reading was showing as "207d ago" because "01.08" got read as 8 Jan instead of 1 Aug).
+ * Parsed explicitly here instead of trusting the Date constructor's guess. */
+function parseFeedDate(s: string): number | null {
+  const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(s.trim());
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).getTime();
+  }
+  const t = new Date(s).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
 function timeAgo(iso: string | null): string {
   if (!iso) return '';
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return iso; // feed's raw string wasn't parseable -- show it as-is rather than "Invalid Date"
+  const t = parseFeedDate(iso);
+  if (t === null) return iso; // feed's raw string wasn't parseable -- show it as-is rather than "Invalid Date"
   const diffMs = Date.now() - t;
   const hrs = Math.floor(diffMs / 3_600_000);
   if (hrs < 1) return 'Just now';
