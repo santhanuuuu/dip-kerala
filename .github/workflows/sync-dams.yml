@@ -1,0 +1,20 @@
+name: Dam water-level sync
+
+# Pings the backend's dam-sync endpoint every 2 hours. Same reason as refresh-news.yml:
+# Render's free tier spins the backend down after ~15 minutes of no traffic, which also
+# pauses the in-process scheduled job in backend/main.py (scheduled_dam_sync) -- this
+# workflow guarantees the sync actually happens on schedule (independent of site visits,
+# which is the whole point), and wakes the backend up as a side effect.
+on:
+  schedule:
+    - cron: '0 */2 * * *'  # every 2 hours, on the hour (UTC) -- matches main.py's interval
+  workflow_dispatch: {}      # lets you manually trigger it from the Actions tab too
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger dam water-level sync
+        run: |
+          curl -sf -X POST https://dip-kerala-backend.onrender.com/api/dams/sync \
+            || echo "Sync request failed -- backend may be slow to wake up, this is non-fatal"

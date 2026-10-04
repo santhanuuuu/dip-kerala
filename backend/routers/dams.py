@@ -107,6 +107,22 @@ def _risk_category(storage_pct: float | None) -> str:
     return "high" if storage_pct >= HIGH_RISK_THRESHOLD_PCT else "normal"
 
 
+def _to_float(v) -> float | None:
+    """The feeds occasionally publish "-" (or "") instead of a number -- seen on barrages
+    like Bhoothathankettu and Moolathara, which don't have a meaningful storage percentage.
+    `float("-")` raises ValueError; letting that escape here previously crashed this entire
+    endpoint (GET /api/dams returned 500, which is why the frontend showed "No dams in the
+    database yet" -- that empty state actually meant "the request failed", not "truly
+    empty"). Treat anything that doesn't parse as genuinely missing, same as None -- never
+    crash, never guess a number."""
+    if v in (None, ""):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
 def _apply_live_reading(d: Dam, live: dict | None) -> dict:
     """Given one Dam row and (maybe) its matching entry from _fetch_live_levels(), updates
     the row's last_known_* columns IN PLACE when there's a genuinely fresh reading, and
@@ -114,11 +130,16 @@ def _apply_live_reading(d: Dam, live: dict | None) -> dict:
     for db.commit()."""
     level_raw = live.get("level") if live else None
     pct_raw = live.get("storage_pct") if live else None
-    is_live_today = live is not None and pct_raw not in (None, "")
+    new_level = _to_float(level_raw)
+    new_pct = _to_float(pct_raw)
+    # A barrage/regulator (e.g. Bhoothathankettu, Moolathara) genuinely has a water level but
+    # no meaningful "% of reservoir full" -- the feed reports that as "-" rather than a
+    # number. Treat a parsed LEVEL as enough to count as live, same as a parsed percentage;
+    # only requiring one, not both, is what used to crash this whole endpoint (float("-")
+    # raised ValueError, which took down GET /api/dams entirely -- see _to_float below).
+    is_live_today = live is not None and (new_level is not None or new_pct is not None)
 
     if is_live_today:
-        new_level = float(level_raw) if level_raw not in (None, "") else None
-        new_pct = float(pct_raw)
         new_updated = live.get("updated")
         if (d.last_known_level_m, d.last_known_storage_percentage, d.last_known_updated_at) != (new_level, new_pct, new_updated):
             d.last_known_level_m = new_level
@@ -196,3 +217,15 @@ def list_dams(db: Session = Depends(get_db)):
             "rather than an invented one."
         ),
     }
+
+
+@router.post("/sync")
+def trigger_dam_sync(db: Session = Depends(get_db)):
+    """Same purpose as POST /api/news/refresh -- an external cron ping (GitHub Actions, see
+    .github/workflows/sync-dams.yml) that guarantees the dam sync actually runs on schedule
+    AND wakes Render's free-tier instance back up, independent of main.py's in-process
+    APScheduler job. That in-process job only fires while the dyno happens to be awake
+    (Render's free tier spins down after ~15 min idle, which pauses it too) -- this endpoint
+    is the belt-and-suspenders fix, same pattern as news."""
+    summary = sync_dam_levels(db, force_refetch=True)
+    return {"status": "ok", "checked": summary["checked"], "live_today": summary["live_today"]}
