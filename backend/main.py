@@ -62,8 +62,29 @@ def scheduled_news_refresh():
         db.close()
 
 
+def scheduled_dam_sync():
+    """Pulls the KSEB/Irrigation Dept live feeds and writes any fresh reading straight into
+    this database (which IS Supabase's Postgres -- there's no separate place to sync to).
+    Runs on a timer so dam data updates even when nobody has visited the site, not only as a
+    side effect of someone loading the Dams page. force_refetch=True bypasses dams.py's own
+    30-minute cache so a job that only fires every 2 hours always checks the real feeds."""
+    from routers.dams import sync_dam_levels
+    db = SessionLocal()
+    try:
+        summary = sync_dam_levels(db, force_refetch=True)
+        print(f"Scheduled dam sync: {summary['live_today']} of {summary['checked']} dams live right now.")
+    except Exception as e:
+        print(f"Scheduled dam sync failed (non-fatal, will retry next interval): {type(e).__name__}: {e}")
+    finally:
+        db.close()
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(scheduled_news_refresh, "interval", hours=1, id="news_refresh")
+# The underlying feeds only update once a day (KSEB) or daily (Irrigation Dept), so every 2
+# hours is plenty fresh without hammering GitHub -- it just means nobody ever sees data more
+# than ~2 hours stale relative to whatever the source itself has published.
+scheduler.add_job(scheduled_dam_sync, "interval", hours=2, id="dam_sync")
 
 
 @app.on_event("startup")
@@ -86,6 +107,8 @@ def startup():
         print(f"Startup seeding failed (non-fatal, app will still start): {type(e).__name__}: {e}")
     finally:
         db.close()
+
+    scheduled_dam_sync()  # run once immediately so dam levels are fresh from the moment the app boots
 
 
 @app.on_event("shutdown")
