@@ -10,13 +10,25 @@ live water-level feed (18 from KSEB's own hydro dams, 20 more from the Irrigatio
 Department's feed) -- see db/dams_reference.csv's `live_feed_key` column. The rest have NO
 public live telemetry anywhere confirmed by checking KSEB's own site directly.
 
-LAST-KNOWN FALLBACK: every dam that has EVER had a genuine live reading gets that reading
-persisted to db/models.py's Dam.last_known_* columns the moment it's seen. If a feed fetch has
-nothing for a dam (feed hiccup, temporary outage, etc.), the response falls back to that
-persisted reading instead of going blank -- clearly marked `is_live_today=False` with its own
-real `last_updated` timestamp, never silently dressed up as live. A dam that has NEVER had a
-live reading keeps current_level_m/storage_percentage/last_updated all null -- that's the
-honest "no live data" case, never a fabricated number.
+LAST-KNOWN FALLBACK: every dam that has EVER had a genuine reading gets that reading persisted
+to db/models.py's Dam.last_known_* columns the moment it's seen -- EVEN IF that reading is
+itself stale (see FRESHNESS below), because a stale-but-real government figure is still the
+most honest number available, and overwriting it is how a bad historical value (e.g. from
+before a live_feed_key mapping was fixed) gets corrected. If a feed fetch has nothing for a dam
+at all (feed hiccup, no mapping, etc.), the response falls back to whatever was last persisted
+instead of going blank -- clearly marked `is_live_today=False` with its own real
+`last_updated` date, never silently dressed up as live. A dam that has NEVER had a reading
+keeps current_level_m/storage_percentage/last_updated all null -- that's the honest "no live
+data" case, never a fabricated number.
+
+FRESHNESS: `is_live_today` is NOT just "did the feed respond" -- it also requires the
+READING'S OWN date (each entry's own "date" field, e.g. "01.08.2026") to be within
+FRESHNESS_WINDOW of now. This matters because KSEB's own feed (18 hydro dams) has been frozen
+on the exact same reading since 01.08.2026: the feed still answers every single poll, and its
+JSON's top-level "lastUpdate" advances every day the SCRAPER runs, but the underlying
+government number hasn't moved in months. Using that top-level timestamp as "last_updated" is
+what previously made 2-month-old data display as "Updated 18h ago" -- fixed by reading each
+entry's own date instead, and only calling it live when that date is actually recent.
 
 AUTOMATIC SYNC TO THE DATABASE: `sync_dam_levels()` below is the single piece of logic that
 actually fetches the feeds and writes last_known_* -- it's called from THREE places, all
@@ -88,10 +100,15 @@ def _fetch_live_levels(force: bool = False) -> dict[str, dict]:
                 key = (dam.get("name") or "").strip().lower()
                 if not key:
                     continue
+                # Use the READING'S OWN "date" field, not payload["lastUpdate"] -- lastUpdate
+                # is just when the SCRAPER last ran, which advances daily even when KSEB's own
+                # underlying number hasn't moved (confirmed: KSEB's feed has been frozen on the
+                # same reading since 01.08.2026 while lastUpdate kept ticking forward every
+                # day). Using lastUpdate here is what made 2-month-old data show as "18h ago".
                 levels[key] = {
                     "level": latest.get("waterLevel"),
                     "storage_pct": latest.get("storagePercentage"),
-                    "updated": payload.get("lastUpdate"),
+                    "updated": latest.get("date") or payload.get("lastUpdate"),
                 }
         except (requests.RequestException, ValueError) as e:
             print(f"Dam live-feed fetch failed for {url}: {type(e).__name__}: {e}")
@@ -99,6 +116,23 @@ def _fetch_live_levels(force: bool = False) -> dict[str, dict]:
 
     _cache, _cache_ts = levels, now
     return levels
+
+
+def _parse_feed_date(s: str | None) -> datetime | None:
+    """Feed dates are DD.MM.YYYY (e.g. "01.08.2026"). Returns None if missing or unparseable
+    -- never guesses a date. Mirrors the frontend's own parseFeedDate() in DamsPage.tsx."""
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s.strip(), "%d.%m.%Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+# How recent a dam's OWN reading date has to be to count as "live today" rather than falling
+# back to last-known. Generous (both feeds update at most once/day) but strict enough that
+# KSEB's frozen-since-01.08.2026 readings correctly fall back instead of claiming to be live.
+FRESHNESS_WINDOW = timedelta(hours=36)
 
 
 def _risk_category(storage_pct: float | None) -> str:
@@ -132,23 +166,36 @@ def _apply_live_reading(d: Dam, live: dict | None) -> dict:
     pct_raw = live.get("storage_pct") if live else None
     new_level = _to_float(level_raw)
     new_pct = _to_float(pct_raw)
+    new_updated = live.get("updated") if live else None
+    reading_date = _parse_feed_date(new_updated)
     # A barrage/regulator (e.g. Bhoothathankettu, Moolathara) genuinely has a water level but
     # no meaningful "% of reservoir full" -- the feed reports that as "-" rather than a
     # number. Treat a parsed LEVEL as enough to count as live, same as a parsed percentage;
     # only requiring one, not both, is what used to crash this whole endpoint (float("-")
     # raised ValueError, which took down GET /api/dams entirely -- see _to_float below).
-    is_live_today = live is not None and (new_level is not None or new_pct is not None)
+    #
+    # Also require the READING'S OWN date to be recent -- a feed that still returns a number
+    # every time it's polled is not the same as that number being fresh. This is what stops
+    # KSEB's frozen-since-01.08.2026 readings from being displayed as "live" / "updated Xh ago"
+    # when the only thing that actually happened recently was the scraper re-running.
+    is_fresh = reading_date is not None and (datetime.now(timezone.utc) - reading_date) <= FRESHNESS_WINDOW
+    has_reading = live is not None and (new_level is not None or new_pct is not None)
+    is_live_today = has_reading and is_fresh
 
-    if is_live_today:
-        new_updated = live.get("updated")
+    # Persist whenever the feed gives us ANY real reading, fresh or not -- a stale reading is
+    # still the real, correctly-matched government figure (and must overwrite a wrong value
+    # left over from before the live_feed_key mapping was fixed). Freshness only decides
+    # whether it's labeled "live" vs "last known"; it never decides whether to save it.
+    if has_reading:
         if (d.last_known_level_m, d.last_known_storage_percentage, d.last_known_updated_at) != (new_level, new_pct, new_updated):
             d.last_known_level_m = new_level
             d.last_known_storage_percentage = new_pct
             d.last_known_updated_at = new_updated
         current_level_m, storage_percentage, last_updated = new_level, new_pct, new_updated
     else:
-        # Nothing fresh right now -- fall back to whatever was last persisted (None for a dam
-        # that has never once had a live reading, the honest "no live data" state).
+        # Feed has nothing for this dam at all right now -- fall back to whatever was last
+        # persisted (None for a dam that has never once had a reading, the honest "no live
+        # data" state).
         current_level_m = d.last_known_level_m
         storage_percentage = d.last_known_storage_percentage
         last_updated = d.last_known_updated_at
