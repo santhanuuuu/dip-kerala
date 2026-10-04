@@ -201,7 +201,13 @@ function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
             )}
           </>
         ) : (
-          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>NO LIVE DATA</div>
+          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>
+            NO LIVE DATA
+            {/* No water-level reading exists, but the dam's static specs (river, owner, FRL)
+                may still be known -- surfaced here too, not just in the detail view, so the
+                tile isn't completely empty when we do have something on file. */}
+            {dam.river && <div style={{ marginTop: 3, fontSize: 9 }}>on {dam.river}</div>}
+          </div>
         )}
       </div>
     </button>

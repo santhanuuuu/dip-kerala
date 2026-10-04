@@ -1,18 +1,18 @@
 name,district,river,owner,latitude,longitude,reservoir_name,dam_type,capacity_mcm,frl_m,live_feed_key
 Neyyar Dam,Thiruvananthapuram,,,,,,,,,Neyyar
-Peppara Dam,Thiruvananthapuram,,,,,,,,,
-Aruvikkara Dam,Thiruvananthapuram,,,,,,,,,
-Thenmala Dam,Kollam,,,,,,,,,
+Peppara Dam,Thiruvananthapuram,Karamana,Kerala Water Authority,8.623,77.138,,Masonry Gravity,,,
+Aruvikkara Dam,Thiruvananthapuram,Karamana,Kerala Water Authority,8.57385,77.02113,,Gravity/Masonry,,,
+Thenmala Dam,Kollam,Kallada,Kerala Irrigation Department,9.95,77.0722,,,,,
 Pamba Dam,Pathanamthitta,,KSEB,9.3906,77.1598,,,2.21,986.33,Pamba
-Kakki Dam,Pathanamthitta,,,,,,,,,
+Kakki Dam,Pathanamthitta,Pamba,,9.2833,77.25,,,,981.456,
 Maniyar Dam,Pathanamthitta,,,,,,,,,Maniyar (Barrage)
 Moozhiyar Dam,Pathanamthitta,Kakkattar,KSEB,9.308,77.0656,Moozhiyar Reservoir,Gravity,0.31,192.63,Moozhiyar
-Perunthenaruvi Weir,Pathanamthitta,,,,,,,,,
-Karikkayam Dam,Pathanamthitta,,,,,,,,,
-Allunkal Dam,Pathanamthitta,,,,,,,,,
-Kochu Pamba Weir,Pathanamthitta,,,,,,,,,
+Perunthenaruvi Weir,Pathanamthitta,Pamba,,,,,,,,
+Karikkayam Dam,Pathanamthitta,Kakkattar,Energy Development Company Limited,9.3353,76.8992,,,,,
+Allunkal Dam,Pathanamthitta,Kakkattar,,9.3375,76.9472,,,,,
+Kochu Pamba Weir,Pathanamthitta,Pamba,KSEB,,,,,,,
 Anathode Dam,Pathanamthitta,,KSEB,9.341667,77.15,,,118.42,981.46,Anathode
-Veluthodu Dam,Pathanamthitta,,,,,,,,,
+Veluthodu Dam,Pathanamthitta,Pamba,,,,,,,,
 Idukki Dam,Idukki,Periyar,KSEB,9.8436,76.9762,Idukki Reservoir,Arch,385.20,732.43,Idukki
 Cheruthoni Dam,Idukki,Periyar,KSEB,,,,,,,
 Kulamavu Dam,Idukki,Periyar,KSEB,,,,,,,
@@ -25,47 +25,47 @@ Kallarkutty Dam,Idukki,,KSEB,9.98,77.001389,,,5.05,456.59,Kallarkutty
 Lower Periyar Dam,Idukki,Periyar,KSEB,9.962,76.9568,,,3.29,253,Pambla
 Erattayar Dam,Idukki,,KSEB,9.8103,77.106,,,0.71,754.38,Erattayar
 Pambla Dam,Idukki,,KSEB,,,,,,,
-Munnar Headworks Dam,Idukki,,,,,,,,,
-Malankara Dam,Idukki,,,,,,,,,Malankara
+Munnar Headworks Dam,Idukki,Muthirapuzha,,,,,,,,
+Malankara Dam,Idukki,Muvattupuzha,Kerala Irrigation Department,,,,,,42.00,Malankara
 Mullaperiyar Dam,Idukki,Periyar,Tamil Nadu PWD,,,Periyar Lake,Masonry Gravity,,,
-Periyar Lake,Idukki,Periyar,Tamil Nadu PWD,,,,,,,
+Periyar Lake,Idukki,Periyar,Tamil Nadu PWD,10.1667,76.25,,,,,
 Kallar Division Dam,Idukki,,,,,,,,,
 Gavi Dam,Idukki,,,,,,,,,
 Kallar Dam,Idukki,,KSEB,9.8255,77.1562,,,0.19,824.48,Kallar
 Meenar 1,Idukki,,,,,,,,,
 Meenar 2,Idukki,,,,,,,,,
 Idamalayar Dam,Ernakulam,Idamalayar,KSEB,10.221868,76.706037,,,322.10,169.00,Idamalayar
-Bhoothathankettu Dam,Ernakulam,Periyar,,,,,,,,Bhoothathankettu (Barrage)
-Neriamangalam Dam,Ernakulam,Periyar,,,,,,,,
+Bhoothathankettu Dam,Ernakulam,Periyar,Kerala Irrigation Department,,,,,,,Bhoothathankettu (Barrage)
+Neriamangalam Dam,Ernakulam,Periyar,KSEB,,,,,,,
 Peechi Dam,Thrissur,Manali,,,,,,,,Peechi
 Vazhani Dam,Thrissur,,,,,,,,,Vazhani
 Chimmony Dam,Thrissur,,,,,,,,,Chimoni
 Peringalkuthu Dam,Thrissur,Chalakudy,,,,,,,,Poringalkuthu
 Sholayar Dam,Thrissur,Sholayar,KSEB,10.3178,76.7342,,,27.16,811.68,Sholayar
-Asurankund Dam,Thrissur,,,,,,,,,
+Asurankund Dam,Thrissur,Chelakkara,,10.6856,76.2956,,,,,
 Malampuzha Dam,Palakkad,Malampuzha,,,,,Earthen,,,Malampuzha
-Mangalam Dam,Palakkad,,,,,,,,,Mangalam
-Meenkara Dam,Palakkad,,,,,,,,,Meenkara
-Chulliyar Dam,Palakkad,,,,,,,,,Chulliyar
-Pothundi Dam,Palakkad,,,,,,,,,Pothundy
-Walayar Dam,Palakkad,,,,,,,,,Walayar
+Mangalam Dam,Palakkad,Bharathapuzha,,10.5167,76.5333,,,,77.88,Mangalam
+Meenkara Dam,Palakkad,Bharathapuzha,,10.6167,76.8,,,,156.36,Meenkara
+Chulliyar Dam,Palakkad,Bharathapuzha,,10.5833,76.7667,,,,154.08,Chulliyar
+Pothundi Dam,Palakkad,Bharathapuzha,,10.5333,76.6333,,,,108.204,Pothundy
+Walayar Dam,Palakkad,Bharathapuzha,,10.8333,76.8667,,,,203.00,Walayar
 Siruvani Dam,Palakkad,Siruvani,,,,,,,,Siruvani
 Kanjirapuzha Dam,Palakkad,Kanjirapuzha,,,,,,,,Kanjirappuzha
-Kanjirapuzha Baby Dam,Palakkad,,,,,,,,,
+Kanjirapuzha Baby Dam,Palakkad,Bharathapuzha,,10.9922,76.5636,,,,36.523,
 Parambikulam Dam,Palakkad,Parambikulam,,,,,,,,
-Thunakkadavu Dam,Palakkad,,,,,,,,,
-Peruvaripallam Dam,Palakkad,,,,,,,,,
-Moolathara Dam,Palakkad,,,,,,,,,
+Thunakkadavu Dam,Palakkad,Chalakudy,,10.4331,76.7839,,,,,
+Peruvaripallam Dam,Palakkad,Chalakudy,,10.4469,76.77,,,,,
+Moolathara Dam,Palakkad,Bharathapuzha,Kerala Irrigation Department,,,,,,184.405,
 Gayathri Dam,Palakkad,,,,,,,,,
 Moolathara Barrage,Palakkad,,,,,,,,,Moolathara (Regulator)
 Lakkidi Dam,Palakkad,,,,,,,,,
 Cheramangalam Dam,Palakkad,,,,,,,,,
 Tharampilli Dam,Palakkad,,,,,,,,,
 Banasura Sagar Dam,Wayanad,Karamanathodu,KSEB,11.6709,75.9504,,Rockfill/Earthen,36.35,775.60,Banasura Sagar
-Karapuzha Dam,Wayanad,Karapuzha,,,,,,,,Karapuzha
+Karapuzha Dam,Wayanad,Karapuzha,Kerala Irrigation Department,,,,,,,Karapuzha
 Kuttiyadi Dam,Kozhikode,Kuttiyadi,KSEB,,,,,,,Kuttiyadi
 Kakkayam Dam,Kozhikode,Kuttiyadi,KSEB,11.551,75.925,,,16.26,758.04,Kakkayam
-Peruvannamuzhi Dam,Kozhikode,,,,,,,,,
+Peruvannamuzhi Dam,Kozhikode,Kuttiyadi,Kerala Irrigation Department,,,,,,,
 Chembukadavu Dam,Kozhikode,,,,,,,,,
 Pazhassi Dam,Kannur,Valapattanam,,,,,,,,Pazhassi (Barrage)
 Kallada Dam,Kollam,,,,,,,,,Kallada
