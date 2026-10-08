@@ -60,17 +60,33 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
     if (!mapRef.current || mapInstanceRef.current) return;
     if ((mapRef.current as any)._leaflet_id) return;
 
-    Promise.all([import('leaflet'), import('leaflet.heat')]).then(([leaflet]) => {
-      const L = leaflet.default;
-      if (!mapRef.current || (mapRef.current as any)._leaflet_id) return;
+    // leaflet.heat is an old-style plugin -- it patches a GLOBAL `L` (`window.L`) rather than
+    // exporting anything itself, since it predates ES modules. Leaflet's own dynamic import
+    // does NOT put it on `window` automatically, so without this line leaflet.heat throws
+    // immediately on load (it can't find `window.L`), the whole Promise.all rejects, and
+    // setMapLoaded(true) never runs -- the map silently gets stuck on "LOADING MAP..." forever
+    // with no visible error. Setting window.L first, then importing leaflet.heat SECOND (not
+    // in parallel) guarantees it's there when leaflet.heat's own top-level code runs.
+    import('leaflet')
+      .then((leaflet) => {
+        const L = leaflet.default;
+        (window as any).L = L;
+        return import('leaflet.heat').then(() => L);
+      })
+      .then((L) => {
+        if (!mapRef.current || (mapRef.current as any)._leaflet_id) return;
 
-      const map = L.map(mapRef.current, { center: [10.5, 76.5], zoom: 7, zoomControl: false });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
+        const map = L.map(mapRef.current, { center: [10.5, 76.5], zoom: 7, zoomControl: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(map);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-      mapInstanceRef.current = { map, L };
-      setMapLoaded(true);
-    });
+        mapInstanceRef.current = { map, L };
+        setMapLoaded(true);
+      })
+      .catch((err) => {
+        // Surface it loudly instead of leaving the map stuck on "LOADING MAP..." with no clue why.
+        console.error('DIP/KL dashboard: failed to initialize the map', err);
+      });
 
     return () => {
       if (mapInstanceRef.current) {
