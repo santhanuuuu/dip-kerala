@@ -2,11 +2,16 @@
 
 An AI-powered flood and landslide risk prediction system for Kerala, built at the
 granularity of all **1,034 LSGD units** (panchayats, municipalities, corporations),
-with post-disaster damage assessment from satellite imagery.
+with post-disaster damage assessment from satellite imagery, live dam water-level
+monitoring, and a GIS risk heatmap dashboard.
 
 Search any place in Kerala and get live flood risk, landslide risk, and current
 weather — combining static terrain data (Google Earth Engine) with live rainfall
-(Open-Meteo) through trained ML models.
+(WeatherAPI.com) through trained ML models.
+
+**Live:** [dip-kerala-frontend.vercel.app](https://dip-kerala-frontend.vercel.app) ·
+Backend API: [dip-kerala-backend.onrender.com](https://dip-kerala-backend.onrender.com) ·
+Docs: `/docs` on the backend URL
 
 ---
 
@@ -19,6 +24,7 @@ weather — combining static terrain data (Google Earth Engine) with live rainfa
 - [Model performance — reported honestly](#model-performance--reported-honestly)
 - [Project structure](#project-structure)
 - [Setup](#setup)
+- [Deployment](#deployment)
 - [API reference](#api-reference)
 - [Known limitations](#known-limitations)
 
@@ -29,30 +35,33 @@ weather — combining static terrain data (Google Earth Engine) with live rainfa
 ```mermaid
 flowchart LR
     subgraph Client
-        FE["React + TypeScript\n(Vite)"]
+        FE["React + TypeScript\n(Vite)\nGIS Dashboard, Dams,\nAlerts, Shelters, Incidents"]
     end
 
-    subgraph Backend["FastAPI Backend"]
-        API["REST API\n/api/risk, /api/places,\n/api/damage-assessment, ..."]
+    subgraph Backend["FastAPI Backend (Render)"]
+        API["REST API\n/api/risk, /api/places,\n/api/dams, /api/incidents,\n/api/damage-assessment, ..."]
         INF["Inference Service\n(loads .pkl / .pt models)"]
         AUTH["Google OAuth + JWT"]
+        DAMSYNC["Dam feed sync\n(KSEB + Irrigation Dept\nlive JSON feeds)"]
     end
 
     subgraph Data["Supabase (PostgreSQL + PostGIS)"]
-        DB[("places, users,\nrisk_queries,\ndamage_assessments,\nshelters, news_cache")]
+        DB[("places, users, dams,\nrisk_queries,\ndamage_assessments,\nshelters, incidents,\nnews_cache")]
     end
 
     subgraph External["External APIs"]
-        OM["Open-Meteo\n(live rainfall)"]
+        WA["WeatherAPI.com\n(live rainfall/weather,\nkey-based quota)"]
         NEWS["NewsAPI\n(disaster news)"]
         GOOGLE["Google OAuth"]
+        KSEB["KSEB / Irrigation Dept\ncommunity dam-level feeds"]
     end
 
     FE -- HTTPS --> API
     API --> AUTH --> GOOGLE
     API --> INF
+    API --> DAMSYNC --> KSEB
     API <--> DB
-    API -- live rainfall --> OM
+    API -- live weather --> WA
     API -- hourly refresh --> NEWS
 ```
 
@@ -61,8 +70,8 @@ flowchart LR
 ## Data pipeline
 
 Terrain features are computed **once, offline**, in Google Earth Engine, then stored
-in Supabase — the backend never calls GEE at request time. Only rainfall is fetched
-live, since it's the one input that changes day to day.
+in Supabase — the backend never calls GEE at request time. Only rainfall/weather and
+dam levels are fetched live, since those are the inputs that change day to day.
 
 ```mermaid
 flowchart TD
@@ -101,20 +110,38 @@ capped honest accuracy at 50.8% (flood) and 17.7% (landslide), regardless of mod
 tuning. Notebook 05 replaces those with genuine per-unit ground truth: real
 Sentinel-1 SAR flood-extent mapping and a published, citable landslide inventory.
 
+**Dam reference data** (`backend/db/dams_reference.csv`) is sourced dam-by-dam from
+KSEB, the Kerala Irrigation Department, Wikipedia, and CEA daily reservoir bulletins
+— static fields (river, owner, capacity, FRL, coordinates) only, never estimated.
+Live water levels come from the community-maintained
+[`amith-vp/Kerala-Dam-Water-Levels`](https://github.com/amith-vp/Kerala-Dam-Water-Levels)
+feed for the ~18 dams KSEB/Irrigation actually telemeter; every other dam is shown
+with static reference info only, honestly labeled as having no live feed.
+
 ---
 
 ## Features
 
 - **Live risk query** — type a place name, get flood probability, landslide risk
   tier, and current weather in one response
-- **Interactive map dashboard** with risk overlays
+- **GIS dashboard with risk heatmaps** — Kerala-wide flood and landslide risk shown
+  as color-graded heatmap layers (dark green → light green → orange → red), active
+  alert pins, and a dam-status layer (red = high risk, green = normal, grey = no
+  live telemetry)
+- **Live dam water-level monitoring** — real-time levels/storage % for telemetered
+  dams, honest freshness checks (a stale reading is never shown as "live"), and
+  static specs (river, owner, capacity, FRL) for dams with no live feed
 - **Post-disaster damage assessment** — upload a pre/post satellite image pair, get
   a tile-level damage classification (No Damage / Minor / Major / Destroyed)
 - **District-wide alert scanning** — batch flood-risk scan across all LSGD units
+- **Crowdsourced incident reports** — flood/landslide/road-blocked reports from
+  users, always disclosed as unverified community reports, never shown with the
+  authority of a model prediction
 - **Live Kerala disaster news feed** (hourly refresh, cached)
-- **Emergency helplines & shelters**, per district
+- **Emergency helplines & shelters**, per district, with user-submitted shelters
+  going through an admin approval queue
 - **User-submitted places** with an admin approval workflow
-- **Google OAuth login**
+- **Google OAuth login**, plus a separate admin login for the review dashboards
 
 ---
 
@@ -122,14 +149,16 @@ Sentinel-1 SAR flood-extent mapping and a published, citable landslide inventory
 
 | Layer | Technology |
 |---|---|
-| Frontend | React, TypeScript, Vite, Tailwind |
+| Frontend | React, TypeScript, Vite, Tailwind, Leaflet (+ leaflet.heat for risk heatmaps) |
 | Backend | FastAPI, Python, SQLAlchemy |
 | Database | PostgreSQL + PostGIS (Supabase) |
 | ML — flood/landslide | RandomForest / XGBoost / LightGBM (scikit-learn) |
 | ML — damage assessment | Siamese CNN, ResNet18 backbone (PyTorch) |
 | Geospatial data | Google Earth Engine (SRTM DEM, Sentinel-1 SAR, JRC Global Surface Water, ESA WorldCover, HydroSHEDS) |
-| Live weather | Open-Meteo API |
+| Live weather | WeatherAPI.com (key-based, dedicated quota — see [Setup](#setup)) |
+| Live dam levels | Community-maintained KSEB/Irrigation Dept feed (`amith-vp/Kerala-Dam-Water-Levels`) |
 | Auth | Google OAuth 2.0 + JWT |
+| Hosting | Vercel (frontend), Render (backend), Supabase (database) |
 | Notebooks | Google Colab |
 
 ---
@@ -162,16 +191,19 @@ near-zero recall on the "High" risk tier.
 DIP_Kerala_project_final/
 ├── backend/
 │   ├── main.py                  # FastAPI app entrypoint
-│   ├── db/                      # SQLAlchemy models, session, seed scripts
-│   ├── routers/                 # API route handlers
-│   ├── services/                # Inference, weather, news, helplines
-│   ├── ml_models/               # Trained .pkl / .pt models + accuracy JSONs
-│   └── data/                    # LSGD boundaries, feature stores
+│   ├── db/                      # SQLAlchemy models, session, seed scripts, dams_reference.csv
+│   ├── routers/                 # places, risk, damage, auth, news, helplines, admin,
+│   │                             #   incidents, dams
+│   ├── services/                # Inference, weather (WeatherAPI.com), news, helplines
+│   ├── ml_models/                # Trained .pkl / .pt models + accuracy JSONs
+│   └── data/                     # LSGD boundaries, feature stores
 ├── frontend/
 │   └── src/
-│       ├── pages/               # Dashboard, Alerts, Damage Assessment, etc.
+│       ├── pages/                # Dashboard (GIS heatmap), Dams, Alerts, Incidents,
+│       │                          #   Shelters, Damage Assessment, Analytics, Risk Manifest,
+│       │                          #   Admin Review, Submit Place, Login, News, Home
 │       ├── components/
-│       └── lib/api.ts           # Backend API client
+│       └── lib/api.ts            # Backend API client
 └── notebooks/
     ├── 00_Build_LSGD_Feature_Store.ipynb
     ├── 00b_Build_Ward_Feature_Store.ipynb
@@ -199,6 +231,7 @@ cp .env.example .env         # then fill in real values
 
 python db/seed_places.py
 python db/seed_helplines.py
+python db/seed_dams.py       # optional standalone run -- also runs automatically on startup
 
 uvicorn main:app --reload --port 8000
 ```
@@ -207,7 +240,7 @@ uvicorn main:app --reload --port 8000
 
 ```bash
 cd frontend
-npm install
+npm install     # or: pnpm install -- the deployed site builds with pnpm, see pnpm-lock.yaml
 npm run dev
 ```
 
@@ -219,7 +252,19 @@ npm run dev
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth login |
 | `JWT_SECRET_KEY` | Signs session tokens |
 | `NEWSAPI_KEY` | Hourly disaster news feed |
+| `WEATHERAPI_KEY` | Live rainfall/temperature/wind for the risk models (free, key-based quota at [weatherapi.com](https://www.weatherapi.com/signup.aspx)). Without it, weather falls back to a climatological estimate — the app still runs, just without real live weather |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Separate admin login for the submissions/shelter review dashboards. If either is unset, admin login is disabled entirely (fails closed) |
 | `FRONTEND_URL` / `BACKEND_URL` | Redirect URLs for OAuth |
+
+---
+
+## Deployment
+
+| Component | Host | Notes |
+|---|---|---|
+| Frontend | [Vercel](https://vercel.com) | Auto-deploys on push to `main`; builds with `pnpm` using `frontend/pnpm-lock.yaml` — keep it in sync with `package.json` or the build fails with `ERR_PNPM_OUTDATED_LOCKFILE` |
+| Backend | [Render](https://render.com) (free tier, Singapore region) | Auto-deploys on push to `main`; cold starts can take up to ~60s on the free tier |
+| Database | [Supabase](https://supabase.com) | PostgreSQL + PostGIS |
 
 ---
 
@@ -228,16 +273,30 @@ npm run dev
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/risk/{place_name}` | GET | Live flood + landslide risk for a place |
-| `/api/risk/alerts` | GET | Scan all LSGD units above a flood-risk threshold |
+| `/api/risk/scan/alerts` | GET | Scan places for flood risk above a threshold |
+| `/api/risk/districts/ranking` | GET | Real, live-computed flood/landslide risk score per district |
+| `/api/risk/history/daily` | GET | Daily query history from actual usage |
 | `/api/places` | GET | All ~1,034 places with terrain features |
 | `/api/places/search?q=` | GET | Fuzzy place name search |
+| `/api/places/{place_id}` | GET | Single place by ID |
+| `/api/places/submit` | POST | Submit a missing place (requires login) |
+| `/api/dams` | GET | All reference dams with live levels where available, static specs otherwise, and a `risk_category` (`high` / `normal` / `no_live_data`) |
+| `/api/dams/sync` | POST | Force a refresh of the live dam-level feeds |
 | `/api/damage-assessment` | POST | Upload pre/post images, get damage classification |
 | `/api/damage-assessment/{place_id}/history` | GET | Past assessments for a place |
+| `/api/incidents` | GET/POST | Crowdsourced flood/landslide/road-blocked reports |
 | `/api/helplines` | GET | Emergency contacts (national + district) |
-| `/api/shelters` | GET | Active shelters |
+| `/api/shelters` | GET/POST | Active shelters; POST submits a new one for admin review |
 | `/api/news` | GET | Cached Kerala disaster news |
+| `/api/news/refresh` | POST | Force a refresh of the news cache |
 | `/api/auth/google/login` | GET | Start Google OAuth flow |
-| `/api/admin/submissions` | GET/POST | Review user-submitted places |
+| `/api/auth/admin-login` | POST | Separate admin session, for review dashboards |
+| `/api/admin/submissions` | GET | Review user-submitted places |
+| `/api/admin/submissions/{id}/approve` | POST | Approve a submitted place |
+| `/api/admin/submissions/{id}/reject` | POST | Reject a submitted place |
+| `/api/admin/shelter-submissions` | GET | Review user-submitted shelters |
+| `/api/admin/shelter-submissions/{id}/approve` | POST | Approve a submitted shelter |
+| `/api/admin/shelter-submissions/{id}/reject` | POST | Reject a submitted shelter |
 
 Full interactive docs available at `/docs` once the backend is running.
 
@@ -247,8 +306,9 @@ Full interactive docs available at `/docs` once the backend is running.
 
 - **Ground truth is one event-year (2018)** for both flood and landslide real
   labels. More independent event-years would further reduce validation variance.
-- **Admin endpoints have no role system yet** — any logged-in user can approve/reject
-  place submissions. Flagged explicitly in `routers/admin.py`.
+- **Admin endpoints have no role system yet** — any logged-in admin can
+  approve/reject place and shelter submissions; there's a single shared admin
+  login, not per-reviewer accounts.
 - **Damage assessment images aren't persisted to storage** — the upload endpoint
   classifies but doesn't yet save images to S3/Cloud Storage (`routers/damage.py`).
 - **Damage assessment is tile-level, not building-level** — a deliberate scoping
@@ -256,7 +316,12 @@ Full interactive docs available at `/docs` once the backend is running.
   is future work.
 - **User-submitted places have no terrain data** until Notebook 00's GEE extraction
   is re-run to include them — risk queries for them will 422 until then.
+- **Dam live data covers ~18 of Kerala's ~70 reference dams** — the rest show
+  verified static specs (where found) with no live telemetry, by design rather than
+  omission; never a fabricated reading.
+- **District-level risk heatmap, not per-place** — the GIS dashboard's flood/
+  landslide heatmap layers color every place by its district's risk score (fast,
+  real, computed live), not a separate model run per place — running the full
+  per-place model for all ~1,034 places on every dashboard load would be too slow.
 
 ---
-
-
