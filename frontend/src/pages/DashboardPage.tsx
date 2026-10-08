@@ -10,10 +10,18 @@ interface DashboardPageProps {
 
 const MUTED = '#4a5e62';
 
-// Heatmap gradient -- same 4-stop grading for both flood and landslide layers: dark green
-// (low risk) -> light green (moderate) -> orange (high) -> red (critical). Stops are intensity
-// (0-1), which the risk score (0-100 from the district ranking endpoint) is normalized into.
-const HEAT_GRADIENT = { 0.0: '#0F5132', 0.4: '#7C9A3C', 0.7: '#D99A2B', 1.0: '#8B1A1A' };
+// Heatmap gradient -- same 4-stop grading for both flood and landslide layers: green (no/low
+// risk) -> yellow (moderate) -> orange (high) -> red (critical). Stops are intensity (0-1),
+// which the risk score (0-100 from the district ranking endpoint) is normalized into.
+// Colors are rgba, not opaque hex -- alpha increases with severity so a "no alert" area barely
+// tints the base map at all, and even "critical" stays translucent enough to see the map
+// underneath, rather than painting a solid opaque blob over Kerala.
+const HEAT_GRADIENT = {
+  0.0: 'rgba(31,111,100,0.22)',   // green, faint -- low/no risk
+  0.4: 'rgba(234,196,53,0.42)',   // yellow -- moderate
+  0.7: 'rgba(217,154,43,0.58)',   // orange -- high
+  1.0: 'rgba(181,74,42,0.72)',    // red -- critical, still see-through
+};
 
 const DAM_RISK_COLOR: Record<DamInfo['risk_category'], string> = {
   high: '#B54A2A',
@@ -97,32 +105,56 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
     };
   }, []);
 
-  // Flood & landslide heatmaps -- one weighted point per real place, intensity = that place's
-  // district risk score (0-1). Redrawn whenever places/ranking/layer toggles change.
+  // Flood & landslide heatmaps -- ONE point per district (not one per place). leaflet.heat
+  // accumulates heat ADDITIVELY wherever points overlap, so plotting the same district score
+  // at all ~1,034 individual place coordinates stacked them into a single saturated red blob
+  // covering nearly the whole state -- there was no way to see "low" vs "critical" because
+  // everything maxed out together. A district only has ONE real risk score anyway (it comes
+  // from the district-ranking endpoint, not a per-place model), so one point per district,
+  // centered on that district's places and sized to spread across it, is both more honest and
+  // the only way the four color bands actually show up distinctly.
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current) return;
     const { map, L } = mapInstanceRef.current;
     const heatLayer = (L as any).heatLayer;
-    if (!heatLayer || keralaPlaces.length === 0) return;
+    if (!heatLayer || keralaPlaces.length === 0 || districtRanking.length === 0) return;
 
     const scoreByDistrict = new Map(districtRanking.map(d => [d.district, d]));
 
+    // Centroid of each district, from the real place coordinates already on hand.
+    const districtCentroids = new Map<string, { lat: number; lon: number }>();
+    const sums = new Map<string, { latSum: number; lonSum: number; n: number }>();
+    for (const p of keralaPlaces) {
+      const s = sums.get(p.district) ?? { latSum: 0, lonSum: 0, n: 0 };
+      s.latSum += p.lat; s.lonSum += p.lon; s.n += 1;
+      sums.set(p.district, s);
+    }
+    for (const [district, s] of sums) {
+      districtCentroids.set(district, { lat: s.latSum / s.n, lon: s.lonSum / s.n });
+    }
+
+    const HEAT_OPTIONS = { radius: 75, blur: 55, maxZoom: 9, max: 1.0, minOpacity: 0.12, gradient: HEAT_GRADIENT };
+
     if (floodHeatRef.current) { map.removeLayer(floodHeatRef.current); floodHeatRef.current = null; }
     if (activeLayers.includes('flood')) {
-      const points = keralaPlaces.map(p => {
-        const score = scoreByDistrict.get(p.district)?.floodRisk ?? 0;
-        return [p.lat, p.lon, score / 100];
-      });
-      floodHeatRef.current = heatLayer(points, { radius: 28, blur: 22, maxZoom: 10, max: 1.0, gradient: HEAT_GRADIENT }).addTo(map);
+      const points = districtRanking
+        .filter(d => districtCentroids.has(d.district))
+        .map(d => {
+          const c = districtCentroids.get(d.district)!;
+          return [c.lat, c.lon, d.floodRisk / 100];
+        });
+      floodHeatRef.current = heatLayer(points, HEAT_OPTIONS).addTo(map);
     }
 
     if (landslideHeatRef.current) { map.removeLayer(landslideHeatRef.current); landslideHeatRef.current = null; }
     if (activeLayers.includes('landslide')) {
-      const points = keralaPlaces.map(p => {
-        const score = scoreByDistrict.get(p.district)?.landslideRisk ?? 0;
-        return [p.lat, p.lon, score / 100];
-      });
-      landslideHeatRef.current = heatLayer(points, { radius: 28, blur: 22, maxZoom: 10, max: 1.0, gradient: HEAT_GRADIENT }).addTo(map);
+      const points = districtRanking
+        .filter(d => districtCentroids.has(d.district))
+        .map(d => {
+          const c = districtCentroids.get(d.district)!;
+          return [c.lat, c.lon, d.landslideRisk / 100];
+        });
+      landslideHeatRef.current = heatLayer(points, HEAT_OPTIONS).addTo(map);
     }
   }, [mapLoaded, activeLayers, keralaPlaces, districtRanking]);
 
@@ -233,7 +265,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
 
           <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>HEATMAP GRADE</div>
-            <div style={{ height: 8, borderRadius: 2, marginBottom: 6, background: 'linear-gradient(90deg, #0F5132, #7C9A3C, #D99A2B, #8B1A1A)' }} />
+            <div style={{ height: 8, borderRadius: 2, marginBottom: 6, background: 'linear-gradient(90deg, #1F6F64, #EAC435, #D99A2B, #B54A2A)' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               {['Low', 'Moderate', 'High', 'Critical'].map(lvl => (
                 <span key={lvl} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.02em' }}>{lvl}</span>
