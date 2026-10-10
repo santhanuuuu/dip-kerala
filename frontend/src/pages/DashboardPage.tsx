@@ -10,18 +10,23 @@ interface DashboardPageProps {
 
 const MUTED = '#4a5e62';
 
-// Heatmap gradient -- same 4-stop grading for both flood and landslide layers: green (no/low
-// risk) -> yellow (moderate) -> orange (high) -> red (critical). Stops are intensity (0-1),
-// which the risk score (0-100 from the district ranking endpoint) is normalized into.
-// Colors are rgba, not opaque hex -- alpha increases with severity so a "no alert" area barely
-// tints the base map at all, and even "critical" stays translucent enough to see the map
-// underneath, rather than painting a solid opaque blob over Kerala.
-const HEAT_GRADIENT = {
-  0.0: 'rgba(31,111,100,0.22)',   // green, faint -- low/no risk
-  0.4: 'rgba(234,196,53,0.42)',   // yellow -- moderate
-  0.7: 'rgba(217,154,43,0.58)',   // orange -- high
-  1.0: 'rgba(181,74,42,0.72)',    // red -- critical, still see-through
-};
+// Real Kerala district boundaries (14 districts), served from the maintainer's own CDN per
+// their README ("direct CDN links ... enabling you to integrate the maps seamlessly into your
+// applications"). Pinned to a specific commit so this never silently changes shape underneath
+// us. Source: https://github.com/udit-001/india-maps-data
+const KERALA_DISTRICTS_GEOJSON_URL =
+  'https://cdn.jsdelivr.net/gh/udit-001/india-maps-data@2884453/geojson/states/kerala.geojson';
+
+// Same 4-band risk coloring already used on the Analytics page's district ranking (AnalyticsPage.tsx)
+// -- Critical >=80, High >=60, Moderate >=40, else Low -- so a district colored red here means
+// exactly the same thing as "CRITICAL" there, and the same colors used for alert pins and dam
+// status. One color code for the whole app, not a different one per page.
+function riskBand(score: number): { level: 'Critical' | 'High' | 'Moderate' | 'Low'; color: string } {
+  if (score >= 80) return { level: 'Critical', color: '#B54A2A' };
+  if (score >= 60) return { level: 'High', color: '#D99A2B' };
+  if (score >= 40) return { level: 'Moderate', color: '#7C9A3C' };
+  return { level: 'Low', color: '#1F6F64' };
+}
 
 const DAM_RISK_COLOR: Record<DamInfo['risk_category'], string> = {
   high: '#B54A2A',
@@ -30,8 +35,8 @@ const DAM_RISK_COLOR: Record<DamInfo['risk_category'], string> = {
 };
 
 const LAYERS = [
-  { id: 'flood', label: 'Flood Risk Heatmap', color: '#D99A2B' },
-  { id: 'landslide', label: 'Landslide Risk Heatmap', color: '#7C9A3C' },
+  { id: 'flood', label: 'Flood Risk by District', color: '#D99A2B' },
+  { id: 'landslide', label: 'Landslide Risk by District', color: '#7C9A3C' },
   { id: 'alerts', label: 'Active Alerts', color: '#1F6F64' },
   { id: 'dams', label: 'Dam Status', color: '#B54A2A' },
 ];
@@ -43,45 +48,40 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const damMarkersRef = useRef<any[]>([]);
-  const floodHeatRef = useRef<any>(null);
-  const landslideHeatRef = useRef<any>(null);
+  const floodLayerRef = useRef<any>(null);
+  const landslideLayerRef = useRef<any>(null);
+  const hasFitBoundsRef = useRef(false);
   const [activeLayers, setActiveLayers] = useState(['flood', 'alerts', 'dams']);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [keralaPlaces, setKeralaPlaces] = useState<Place[]>([]);
   const [activeAlerts, setActiveAlerts] = useState<Alert[]>([]);
   const [districtRanking, setDistrictRanking] = useState<DistrictRanking[]>([]);
   const [dams, setDams] = useState<DamInfo[]>([]);
+  const [districtGeoJson, setDistrictGeoJson] = useState<any>(null);
 
   useEffect(() => {
     fetchAllPlaces().then(setKeralaPlaces).catch(() => setKeralaPlaces([]));
     fetchRealAlerts().then(setActiveAlerts).catch(() => setActiveAlerts([]));
     // District ranking gives REAL, model-computed flood/landslide risk scores (0-100) per
-    // district -- not sample data (see risk.py's district_risk_ranking()). That's the only
-    // risk signal that exists for every place at once; querying the full per-place model for
-    // all ~1,034 places on every dashboard load would be far too heavy, so the heatmap below
-    // paints each place with its own district's score rather than a per-place prediction.
+    // district -- not sample data (see risk.py's district_risk_ranking()). It's the only risk
+    // signal that exists for every district at once; the district shading below colors each
+    // district by this one real score rather than running the full per-place model ~1,034
+    // times on every dashboard load.
     fetchDistrictRanking().then(d => setDistrictRanking(d.results)).catch(() => setDistrictRanking([]));
     fetchDams().then(d => setDams(d.results)).catch(() => setDams([]));
+    fetch(KERALA_DISTRICTS_GEOJSON_URL)
+      .then(r => r.json())
+      .then(setDistrictGeoJson)
+      .catch(() => setDistrictGeoJson(null));
   }, []);
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
     if ((mapRef.current as any)._leaflet_id) return;
 
-    // leaflet.heat is an old-style plugin -- it patches a GLOBAL `L` (`window.L`) rather than
-    // exporting anything itself, since it predates ES modules. Leaflet's own dynamic import
-    // does NOT put it on `window` automatically, so without this line leaflet.heat throws
-    // immediately on load (it can't find `window.L`), the whole Promise.all rejects, and
-    // setMapLoaded(true) never runs -- the map silently gets stuck on "LOADING MAP..." forever
-    // with no visible error. Setting window.L first, then importing leaflet.heat SECOND (not
-    // in parallel) guarantees it's there when leaflet.heat's own top-level code runs.
     import('leaflet')
       .then((leaflet) => {
         const L = leaflet.default;
-        (window as any).L = L;
-        return import('leaflet.heat').then(() => L);
-      })
-      .then((L) => {
         if (!mapRef.current || (mapRef.current as any)._leaflet_id) return;
 
         const map = L.map(mapRef.current, { center: [10.5, 76.5], zoom: 7, zoomControl: false });
@@ -105,60 +105,64 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
     };
   }, []);
 
-  // Flood & landslide heatmaps -- ONE point per district (not one per place). leaflet.heat
-  // accumulates heat ADDITIVELY wherever points overlap, so plotting the same district score
-  // at all ~1,034 individual place coordinates stacked them into a single saturated red blob
-  // covering nearly the whole state -- there was no way to see "low" vs "critical" because
-  // everything maxed out together. A district only has ONE real risk score anyway (it comes
-  // from the district-ranking endpoint, not a per-place model), so one point per district,
-  // centered on that district's places and sized to spread across it, is both more honest and
-  // the only way the four color bands actually show up distinctly.
+  // Flood & landslide risk -- shown as the actual district shapes colored by that district's
+  // real risk score, not a glowing gradient cloud. A gradient blob doesn't respect district
+  // borders (it bled into Tamil Nadu/Karnataka) and its color at any one spot is hard to read
+  // at a glance; a colored district with a name on it ("Wayanad is red") is immediate for
+  // someone who isn't a GIS person. Same color bands as everywhere else in the app.
   useEffect(() => {
-    if (!mapLoaded || !mapInstanceRef.current) return;
+    if (!mapLoaded || !mapInstanceRef.current || !districtGeoJson) return;
     const { map, L } = mapInstanceRef.current;
-    const heatLayer = (L as any).heatLayer;
-    if (!heatLayer || keralaPlaces.length === 0 || districtRanking.length === 0) return;
+    if (districtRanking.length === 0) return;
 
     const scoreByDistrict = new Map(districtRanking.map(d => [d.district, d]));
 
-    // Centroid of each district, from the real place coordinates already on hand.
-    const districtCentroids = new Map<string, { lat: number; lon: number }>();
-    const sums = new Map<string, { latSum: number; lonSum: number; n: number }>();
-    for (const p of keralaPlaces) {
-      const s = sums.get(p.district) ?? { latSum: 0, lonSum: 0, n: 0 };
-      s.latSum += p.lat; s.lonSum += p.lon; s.n += 1;
-      sums.set(p.district, s);
-    }
-    for (const [district, s] of sums) {
-      districtCentroids.set(district, { lat: s.latSum / s.n, lon: s.lonSum / s.n });
-    }
+    const makeLayer = (metric: 'floodRisk' | 'landslideRisk', metricLabel: string) =>
+      L.geoJSON(districtGeoJson, {
+        style: (feature: any) => {
+          const d = scoreByDistrict.get(feature.properties.district);
+          const score = d ? d[metric] : 0;
+          const { color } = riskBand(score);
+          return { fillColor: color, fillOpacity: 0.45, color: '#ffffff', weight: 1.5, opacity: 0.9 };
+        },
+        onEachFeature: (feature: any, layer: any) => {
+          const d = scoreByDistrict.get(feature.properties.district);
+          const score = d ? d[metric] : 0;
+          const { level, color } = riskBand(score);
+          const content = `
+            <div style="font-family:'IBM Plex Mono',monospace;background:#ffffff;color:#12262B;border:1px solid ${color};border-top:3px solid ${color};padding:10px;border-radius:3px;min-width:160px;box-shadow:0 4px 12px rgba(18,38,43,0.1)">
+              <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;margin-bottom:4px">${feature.properties.district}</div>
+              <div style="font-size:10px;color:${color};letter-spacing:0.08em;margin-bottom:4px">${metricLabel}: ${level.toUpperCase()}</div>
+              <div style="font-size:10px;color:#4a5e62">Score: ${Math.round(score)} / 100</div>
+            </div>
+          `;
+          layer.bindTooltip(`${feature.properties.district} — ${level}`, { sticky: true, className: 'leaflet-tooltip-dip' });
+          layer.bindPopup(content, { className: 'leaflet-popup-dip' });
+          layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.65 }));
+          layer.on('mouseout', () => layer.setStyle({ fillOpacity: 0.45 }));
+        },
+      });
 
-    const HEAT_OPTIONS = { radius: 75, blur: 55, maxZoom: 9, max: 1.0, minOpacity: 0.12, gradient: HEAT_GRADIENT };
-
-    if (floodHeatRef.current) { map.removeLayer(floodHeatRef.current); floodHeatRef.current = null; }
+    if (floodLayerRef.current) { map.removeLayer(floodLayerRef.current); floodLayerRef.current = null; }
     if (activeLayers.includes('flood')) {
-      const points = districtRanking
-        .filter(d => districtCentroids.has(d.district))
-        .map(d => {
-          const c = districtCentroids.get(d.district)!;
-          return [c.lat, c.lon, d.floodRisk / 100];
-        });
-      floodHeatRef.current = heatLayer(points, HEAT_OPTIONS).addTo(map);
+      floodLayerRef.current = makeLayer('floodRisk', 'Flood risk').addTo(map);
+      if (!hasFitBoundsRef.current) {
+        map.fitBounds(floodLayerRef.current.getBounds(), { padding: [16, 16] });
+        hasFitBoundsRef.current = true;
+      }
     }
 
-    if (landslideHeatRef.current) { map.removeLayer(landslideHeatRef.current); landslideHeatRef.current = null; }
+    if (landslideLayerRef.current) { map.removeLayer(landslideLayerRef.current); landslideLayerRef.current = null; }
     if (activeLayers.includes('landslide')) {
-      const points = districtRanking
-        .filter(d => districtCentroids.has(d.district))
-        .map(d => {
-          const c = districtCentroids.get(d.district)!;
-          return [c.lat, c.lon, d.landslideRisk / 100];
-        });
-      landslideHeatRef.current = heatLayer(points, HEAT_OPTIONS).addTo(map);
+      landslideLayerRef.current = makeLayer('landslideRisk', 'Landslide risk').addTo(map);
+      if (!hasFitBoundsRef.current) {
+        map.fitBounds(landslideLayerRef.current.getBounds(), { padding: [16, 16] });
+        hasFitBoundsRef.current = true;
+      }
     }
-  }, [mapLoaded, activeLayers, keralaPlaces, districtRanking]);
+  }, [mapLoaded, activeLayers, districtRanking, districtGeoJson]);
 
-  // Active-alert pins -- unchanged from before, just no longer doubles as the general flood-risk layer.
+  // Active-alert pins -- unchanged: exact place markers, separate from the district shading above.
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current) return;
     const { map, L } = mapInstanceRef.current;
@@ -263,21 +267,13 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
             </div>
           </div>
 
+          {/* One color legend for the whole page -- district shading, alert pins, and these
+              four levels all mean the same thing everywhere, so there's only one code to learn. */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>HEATMAP GRADE</div>
-            <div style={{ height: 8, borderRadius: 2, marginBottom: 6, background: 'linear-gradient(90deg, #1F6F64, #EAC435, #D99A2B, #B54A2A)' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              {['Low', 'Moderate', 'High', 'Critical'].map(lvl => (
-                <span key={lvl} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.02em' }}>{lvl}</span>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>ALERT PIN LEGEND</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>RISK LEVELS</div>
             {([['Critical', '#B54A2A'], ['High', '#D99A2B'], ['Moderate', '#7C9A3C'], ['Low', '#1F6F64']] as const).map(([lvl, col]) => (
               <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: col }} />
+                <div style={{ width: 12, height: 12, borderRadius: 2, background: col }} />
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.04em' }}>{lvl}</span>
               </div>
             ))}
@@ -325,7 +321,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
           <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, background: 'rgba(242,244,239,0.95)', border: '1px solid rgba(18,38,43,0.12)', borderRadius: 3, padding: '8px 12px', boxShadow: '0 2px 8px rgba(18,38,43,0.08)' }}>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.08em' }}>DIP/KL · GIS DASHBOARD</div>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#1F6F64', marginTop: 2 }}>Kerala Risk Heatmap · Dam Status · Live Alerts</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#1F6F64', marginTop: 2 }}>District Risk Colors · Dam Status · Live Alerts</div>
           </div>
           {isMobile && (
             <button
