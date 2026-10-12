@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchDams, type DamInfo, type DamRiskCategory } from '../lib/api';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/dams';
 
 const MUTED = '#4a5e62';
 
@@ -11,11 +13,11 @@ function statusColor(pct: number | null): string {
   if (pct >= 75) return '#D99A2B';
   return '#1F6F64';
 }
-function statusLabel(pct: number | null): string {
-  if (pct === null) return 'UNKNOWN';
-  if (pct >= 90) return 'DANGER';
-  if (pct >= 75) return 'WATCH';
-  return 'SAFE';
+function statusLabel(pct: number | null, t: (k: string) => string): string {
+  if (pct === null) return t('statusUnknown');
+  if (pct >= 90) return t('statusDanger');
+  if (pct >= 75) return t('statusWatch');
+  return t('statusSafe');
 }
 
 /** KSEB/Irrigation feed timestamps come as "DD.MM.YYYY" (e.g. "03.10.2026") -- day first, NOT
@@ -29,20 +31,20 @@ function parseFeedDate(s: string): number | null {
     const [, dd, mm, yyyy] = m;
     return new Date(Number(yyyy), Number(mm) - 1, Number(dd)).getTime();
   }
-  const t = new Date(s).getTime();
-  return Number.isNaN(t) ? null : t;
+  const parsed = new Date(s).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
 }
 
-function timeAgo(iso: string | null): string {
+function timeAgo(iso: string | null, t: (k: string) => string): string {
   if (!iso) return '';
-  const t = parseFeedDate(iso);
-  if (t === null) return iso; // feed's raw string wasn't parseable -- show it as-is rather than "Invalid Date"
-  const diffMs = Date.now() - t;
+  const parsed = parseFeedDate(iso);
+  if (parsed === null) return iso; // feed's raw string wasn't parseable -- show it as-is rather than "Invalid Date"
+  const diffMs = Date.now() - parsed;
   const hrs = Math.floor(diffMs / 3_600_000);
-  if (hrs < 1) return 'Just now';
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 1) return t('justNow');
+  if (hrs < 24) return `${hrs}${t('hoursAgoSuffix')}`;
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${days}${t('daysAgoSuffix')}`;
 }
 
 function SpecRow({ label, value }: { label: string; value: string | number | null }) {
@@ -60,6 +62,7 @@ function SpecRow({ label, value }: { label: string; value: string | number | nul
  * conventions. Shows the "last updated" timestamp unconditionally, whether the reading is
  * live right now or a persisted last-known value. */
 function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
+  const t = useT(dict);
   // A dam can have a real reading with NO percentage -- barrages/regulators (Bhoothathankettu,
   // Malankara, Pazhassi, Chulliyar, Kuttiyadi, Kallada, Moolathara) report a genuine water
   // LEVEL every day but structurally never report "% of reservoir full" (no FRL-style capacity
@@ -86,11 +89,11 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color, fontWeight: 700, letterSpacing: '0.06em' }}>
-            {hasPct ? `● ${statusLabel(dam.storage_percentage)}` : hasAnyReading ? '● LEVEL RECORDED' : 'NO LIVE DATA'}
+            {hasPct ? `● ${statusLabel(dam.storage_percentage, t)}` : hasAnyReading ? `● ${t('levelRecordedLabel')}` : t('noLiveDataLabel')}
           </span>
           {hasAnyReading && !dam.is_live_today && (
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#8a6216', background: 'rgba(217,154,43,0.12)', padding: '2px 6px', borderRadius: 1, fontWeight: 600 }}>
-              LAST KNOWN
+              {t('lastKnownBadge')}
             </span>
           )}
         </div>
@@ -101,7 +104,7 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
               <div style={{ height: '100%', width: `${Math.min(dam.storage_percentage ?? 0, 100)}%`, background: color }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED, marginTop: 6 }}>
-              <span>{dam.storage_percentage!.toFixed(1)}% full</span>
+              <span>{dam.storage_percentage!.toFixed(1)}{t('pctFullSuffix')}</span>
               <span>{dam.current_level_m !== null ? `${dam.current_level_m} m` : ''}</span>
             </div>
           </div>
@@ -111,30 +114,30 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
             compute a percentage against -- still a real, fresh government reading. */}
         {!hasPct && hasAnyReading && (
           <div style={{ marginBottom: 16, fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: '#12262B' }}>
-            Water level: <strong>{dam.current_level_m} m</strong>
+            {t('waterLevelLabel')} <strong>{dam.current_level_m} m</strong>
             <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: MUTED, marginTop: 2 }}>
-              This structure doesn't report a "% full" figure (typical for a barrage/regulator).
+              {t('noPctFigureNotice')}
             </div>
           </div>
         )}
 
         <div>
-          <SpecRow label="District" value={dam.district} />
-          <SpecRow label="River" value={dam.river} />
-          <SpecRow label="Owner" value={dam.owner} />
-          <SpecRow label="Type" value={dam.dam_type} />
-          <SpecRow label="Reservoir" value={dam.reservoir_name} />
-          <SpecRow label="Capacity" value={dam.capacity_mcm ? `${dam.capacity_mcm} MCM` : null} />
-          <SpecRow label="FRL" value={dam.frl_m ? `${dam.frl_m} m` : null} />
-          <SpecRow label="Coordinates" value={dam.latitude && dam.longitude ? `${dam.latitude.toFixed(4)}, ${dam.longitude.toFixed(4)}` : null} />
+          <SpecRow label={t('districtLabel')} value={dam.district} />
+          <SpecRow label={t('riverLabel')} value={dam.river} />
+          <SpecRow label={t('ownerLabel')} value={dam.owner} />
+          <SpecRow label={t('typeFieldLabel')} value={dam.dam_type} />
+          <SpecRow label={t('reservoirLabel')} value={dam.reservoir_name} />
+          <SpecRow label={t('capacityLabel')} value={dam.capacity_mcm ? `${dam.capacity_mcm} MCM` : null} />
+          <SpecRow label={t('frlLabel')} value={dam.frl_m ? `${dam.frl_m} m` : null} />
+          <SpecRow label={t('coordinatesLabel')} value={dam.latitude && dam.longitude ? `${dam.latitude.toFixed(4)}, ${dam.longitude.toFixed(4)}` : null} />
         </div>
 
         {/* Last-updated is shown for EVERY dam, live or not -- a dam with no reading at all
             (never had live telemetry) has nothing to show here, which is itself honest. */}
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, marginTop: 12 }}>
           {dam.last_updated
-            ? `Details last updated ${timeAgo(dam.last_updated)}`
-            : 'No live reading has ever been recorded for this dam.'}
+            ? `${t('detailsUpdatedPrefix')} ${timeAgo(dam.last_updated, t)}`
+            : t('neverRecordedNotice')}
         </div>
 
         {/* This is a real caveat about the GOVERNMENT source, not an error on our end --
@@ -142,9 +145,7 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
             report inconsistent percentages between polls, independent of anything we compute. */}
         {dam.is_small_capacity && (
           <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: '#8a6216', background: 'rgba(217,154,43,0.1)', padding: '8px 10px', borderRadius: 2, marginTop: 10 }}>
-            Small check dam/regulator ({dam.capacity_mcm} MCM capacity) -- KSEB's own readings for
-            structures this size are known to swing inconsistently between updates. This isn't a
-            fault in our data pipeline; it's relayed exactly as the government feed reports it.
+            {t('smallDamCaveatPrefix')}{dam.capacity_mcm}{t('smallDamCaveatSuffix')}
           </div>
         )}
       </div>
@@ -152,15 +153,18 @@ function DamDetail({ dam, onClose }: { dam: DamInfo; onClose: () => void }) {
   );
 }
 
-const TABS: { key: DamRiskCategory; label: string }[] = [
-  { key: 'high', label: 'High Risk' },
-  { key: 'normal', label: 'Normal' },
-  { key: 'no_live_data', label: 'No Live Data' },
-];
+function getTabs(t: (k: string) => string): { key: DamRiskCategory; label: string }[] {
+  return [
+    { key: 'high', label: t('tabHighRisk') },
+    { key: 'normal', label: t('tabNormal') },
+    { key: 'no_live_data', label: t('tabNoLiveData') },
+  ];
+}
 
 /** One square tile in the grid -- name, status color, % (or a last-known/no-data badge), and
  * a last-updated stamp, always visible so staleness is never hidden. */
 function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
+  const t = useT(dict);
   // Same fix as DamDetail -- a barrage/regulator can have a real level reading with no %
   // figure at all (structurally, not a gap in our data), so "no reading" must check BOTH
   // fields, not just storage_percentage.
@@ -191,22 +195,22 @@ function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
               {hasPct ? `${dam.storage_percentage!.toFixed(0)}%` : `${dam.current_level_m} m`}
             </div>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, marginTop: 4 }}>
-              {!dam.is_live_today && <span style={{ color: '#8a6216', fontWeight: 600 }}>LAST KNOWN · </span>}
-              {dam.last_updated ? `Updated ${timeAgo(dam.last_updated)}` : ''}
+              {!dam.is_live_today && <span style={{ color: '#8a6216', fontWeight: 600 }}>{t('lastKnownBadge')} · </span>}
+              {dam.last_updated ? `${t('updatedPrefix')} ${timeAgo(dam.last_updated, t)}` : ''}
             </div>
             {dam.is_small_capacity && (
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 8, color: '#8a6216', marginTop: 2 }}>
-                ⚠ small dam, volatile reading
+                {t('smallDamVolatileNotice')}
               </div>
             )}
           </>
         ) : (
           <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>
-            NO LIVE DATA
+            {t('noLiveDataLabel')}
             {/* No water-level reading exists, but the dam's static specs (river, owner, FRL)
                 may still be known -- surfaced here too, not just in the detail view, so the
                 tile isn't completely empty when we do have something on file. */}
-            {dam.river && <div style={{ marginTop: 3, fontSize: 9 }}>on {dam.river}</div>}
+            {dam.river && <div style={{ marginTop: 3, fontSize: 9 }}>{t('onRiverPrefix')} {dam.river}</div>}
           </div>
         )}
       </div>
@@ -215,11 +219,14 @@ function DamTile({ dam, onOpen }: { dam: DamInfo; onOpen: () => void }) {
 }
 
 export default function DamsPage() {
+  const t = useT(dict);
   const [dams, setDams] = useState<DamInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState('');
   const [tab, setTab] = useState<DamRiskCategory>('high');
   const [selected, setSelected] = useState<DamInfo | null>(null);
+
+  const TABS = useMemo(() => getTabs(t), [t]);
 
   useEffect(() => {
     fetchDams()
@@ -256,21 +263,21 @@ export default function DamsPage() {
     <div style={{ minHeight: '100vh', background: '#F2F4EF' }}>
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 64px' }}>
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>
-          DAM WATER LEVELS
+          {t('damWaterLevelsBadge')}
         </div>
         <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 28, color: '#12262B', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
-          Kerala Dams
+          {t('pageTitle')}
         </h1>
 
-        {loading && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading…</div>}
+        {loading && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('loadingLabel')}</div>}
 
         {!loading && dams.length === 0 && (
           <div style={{ padding: '32px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
             <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B', marginBottom: 8 }}>
-              No dams in the database yet
+              {t('noDamsTitle')}
             </div>
             <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>
-              Restart the backend once to trigger the automatic seed, or run <code style={{ background: 'rgba(18,38,43,0.06)', padding: '1px 6px', borderRadius: 2 }}>python db/seed_dams.py</code> manually.
+              {t('noDamsPrefix')} <code style={{ background: 'rgba(18,38,43,0.06)', padding: '1px 6px', borderRadius: 2 }}>python db/seed_dams.py</code> {t('noDamsSuffix')}
             </p>
           </div>
         )}
@@ -285,13 +292,13 @@ export default function DamsPage() {
 
             {/* Filter tabs -- High Risk / Normal / No Live Data, each with a live count. */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 20 }}>
-              {TABS.map((t) => {
-                const active = tab === t.key;
-                const tabColor = t.key === 'high' ? '#B54A2A' : t.key === 'normal' ? '#1F6F64' : MUTED;
+              {TABS.map((tabItem) => {
+                const active = tab === tabItem.key;
+                const tabColor = tabItem.key === 'high' ? '#B54A2A' : tabItem.key === 'normal' ? '#1F6F64' : MUTED;
                 return (
                   <button
-                    key={t.key}
-                    onClick={() => setTab(t.key)}
+                    key={tabItem.key}
+                    onClick={() => setTab(tabItem.key)}
                     style={{
                       padding: '10px 18px', borderRadius: 2, cursor: 'pointer',
                       fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, fontWeight: 600,
@@ -300,7 +307,7 @@ export default function DamsPage() {
                       border: `1px solid ${active ? tabColor : 'rgba(18,38,43,0.2)'}`,
                     }}
                   >
-                    {t.label.toUpperCase()} · {counts[t.key]}
+                    {tabItem.label.toUpperCase()} · {counts[tabItem.key]}
                   </button>
                 );
               })}
@@ -308,7 +315,7 @@ export default function DamsPage() {
 
             {tabDams.length === 0 && (
               <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
-                No dams in this category.
+                {t('noDamsInCategory')}
               </div>
             )}
 

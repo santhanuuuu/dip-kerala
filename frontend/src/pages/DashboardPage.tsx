@@ -3,6 +3,8 @@ import { riskColor, type Place, type Alert } from '../data/mockData';
 import { fetchAllPlaces, fetchRealAlerts, fetchDistrictRanking, fetchDams, type DamInfo, type DistrictRanking } from '../lib/api';
 import { type Page } from '../App';
 import useIsMobile from '../hooks/useIsMobile';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/dashboard';
 
 interface DashboardPageProps {
   navigate: (page: Page, placeId?: number) => void;
@@ -35,13 +37,14 @@ const DAM_RISK_COLOR: Record<DamInfo['risk_category'], string> = {
 };
 
 const LAYERS = [
-  { id: 'flood', label: 'Flood Risk by District', color: '#D99A2B' },
-  { id: 'landslide', label: 'Landslide Risk by District', color: '#7C9A3C' },
-  { id: 'alerts', label: 'Active Alerts', color: '#1F6F64' },
-  { id: 'dams', label: 'Dam Status', color: '#B54A2A' },
+  { id: 'flood', labelKey: 'layerFloodLabel', color: '#D99A2B' },
+  { id: 'landslide', labelKey: 'layerLandslideLabel', color: '#7C9A3C' },
+  { id: 'alerts', labelKey: 'layerAlertsLabel', color: '#1F6F64' },
+  { id: 'dams', labelKey: 'layerDamsLabel', color: '#B54A2A' },
 ];
 
 export default function DashboardPage({ navigate }: DashboardPageProps) {
+  const t = useT(dict);
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -251,7 +254,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
           } : {}),
         }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 12 }}>LAYER TOGGLES</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 12 }}>{t('layerTogglesLabel')}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {LAYERS.map(layer => (
                 <button key={layer.id} onClick={() => toggleLayer(layer.id)} style={{
@@ -261,7 +264,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
                   borderRadius: 2, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
                 }}>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: activeLayers.includes(layer.id) ? layer.color : 'rgba(18,38,43,0.2)', flexShrink: 0 }} />
-                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: activeLayers.includes(layer.id) ? '#12262B' : MUTED, letterSpacing: '0.04em' }}>{layer.label}</span>
+                  <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: activeLayers.includes(layer.id) ? '#12262B' : MUTED, letterSpacing: '0.04em' }}>{t(layer.labelKey)}</span>
                 </button>
               ))}
             </div>
@@ -270,28 +273,28 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
           {/* One color legend for the whole page -- district shading, alert pins, and these
               four levels all mean the same thing everywhere, so there's only one code to learn. */}
           <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>RISK LEVELS</div>
-            {([['Critical', '#B54A2A'], ['High', '#D99A2B'], ['Moderate', '#7C9A3C'], ['Low', '#1F6F64']] as const).map(([lvl, col]) => (
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>{t('riskLevelsLabel')}</div>
+            {([['Critical', '#B54A2A', 'riskCritical'], ['High', '#D99A2B', 'riskHigh'], ['Moderate', '#7C9A3C', 'riskModerate'], ['Low', '#1F6F64', 'riskLow']] as const).map(([lvl, col, labelKey]) => (
               <div key={lvl} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <div style={{ width: 12, height: 12, borderRadius: 2, background: col }} />
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.04em' }}>{lvl}</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.04em' }}>{t(labelKey)}</span>
               </div>
             ))}
           </div>
 
           <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>DAM STATUS</div>
-            {([['High risk', DAM_RISK_COLOR.high], ['Normal', DAM_RISK_COLOR.normal], ['No live data', DAM_RISK_COLOR.no_live_data]] as const).map(([lbl, col]) => (
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>{t('damStatusLabel')}</div>
+            {([['High risk', DAM_RISK_COLOR.high, 'damHighRisk'], ['Normal', DAM_RISK_COLOR.normal, 'damNormal'], ['No live data', DAM_RISK_COLOR.no_live_data, 'damNoLiveData']] as const).map(([lbl, col, labelKey]) => (
               <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <div style={{ width: 8, height: 8, background: col, transform: 'rotate(45deg)' }} />
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.04em' }}>{lbl}</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.04em' }}>{t(labelKey)}</span>
               </div>
             ))}
           </div>
 
           <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px' }}>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 10 }}>
-              CRITICAL ZONES — {activeAlerts.filter(a => a.riskLevel === 'Critical').length}
+              {t('criticalZonesPrefix')} {activeAlerts.filter(a => a.riskLevel === 'Critical').length}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {activeAlerts.map(alert => (
@@ -320,8 +323,8 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
         <div style={{ position: 'relative', overflow: 'hidden' }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
           <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 500, background: 'rgba(242,244,239,0.95)', border: '1px solid rgba(18,38,43,0.12)', borderRadius: 3, padding: '8px 12px', boxShadow: '0 2px 8px rgba(18,38,43,0.08)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.08em' }}>DIP/KL · GIS DASHBOARD</div>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#1F6F64', marginTop: 2 }}>District Risk Colors · Dam Status · Live Alerts</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.08em' }}>{t('gisDashboardLabel')}</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: '#1F6F64', marginTop: 2 }}>{t('mapLegendSummary')}</div>
           </div>
           {isMobile && (
             <button
@@ -333,7 +336,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
                 cursor: 'pointer', boxShadow: '0 2px 8px rgba(18,38,43,0.2)',
               }}
             >
-              {sidebarOpen ? '✕ Close' : '☰ Layers & Alerts'}
+              {sidebarOpen ? t('closeButton') : t('layersAlertsButton')}
             </button>
           )}
           {isMobile && sidebarOpen && (
@@ -344,7 +347,7 @@ export default function DashboardPage({ navigate }: DashboardPageProps) {
           )}
           {!mapLoaded && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F2F4EF', zIndex: 400 }}>
-              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64', letterSpacing: '0.08em' }}>LOADING MAP…</div>
+              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64', letterSpacing: '0.08em' }}>{t('loadingMap')}</div>
             </div>
           )}
         </div>

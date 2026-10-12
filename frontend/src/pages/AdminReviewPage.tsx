@@ -4,10 +4,13 @@ import {
   fetchPendingShelters, approveShelter, rejectShelter, type PendingShelter,
 } from '../lib/api';
 import useIsMobile from '../hooks/useIsMobile';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/adminReview';
 
 const MUTED = '#4a5e62';
 
 export default function AdminReviewPage() {
+  const t = useT(dict);
   const isMobile = useIsMobile();
   const [submissions, setSubmissions] = useState<PendingSubmission[]>([]);
   const [shelters, setShelters] = useState<PendingShelter[]>([]);
@@ -22,7 +25,7 @@ export default function AdminReviewPage() {
         setSubmissions(subs);
         setShelters(shelts);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Could not load pending items.'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('couldNotLoadPending')))
       .finally(() => setLoading(false));
   };
 
@@ -34,7 +37,7 @@ export default function AdminReviewPage() {
       await approveSubmission(id);
       setSubmissions((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Approval failed.');
+      setError(e instanceof Error ? e.message : t('approvalFailed'));
     } finally {
       setActingOn(null);
     }
@@ -46,7 +49,7 @@ export default function AdminReviewPage() {
       await rejectSubmission(id);
       setSubmissions((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Rejection failed.');
+      setError(e instanceof Error ? e.message : t('rejectionFailed'));
     } finally {
       setActingOn(null);
     }
@@ -58,7 +61,7 @@ export default function AdminReviewPage() {
       await approveShelter(id);
       setShelters((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Approval failed.');
+      setError(e instanceof Error ? e.message : t('approvalFailed'));
     } finally {
       setActingOn(null);
     }
@@ -70,7 +73,7 @@ export default function AdminReviewPage() {
       await rejectShelter(id);
       setShelters((prev) => prev.filter((s) => s.id !== id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Rejection failed.');
+      setError(e instanceof Error ? e.message : t('rejectionFailed'));
     } finally {
       setActingOn(null);
     }
@@ -80,9 +83,9 @@ export default function AdminReviewPage() {
     <div style={{ minHeight: '100vh', background: '#F2F4EF' }}>
       <div style={{ maxWidth: 900, margin: '0 auto', padding: isMobile ? '24px 16px 48px' : '32px 24px 64px' }}>
         <div style={{ marginBottom: 24 }}>
-          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>ADMIN</div>
+          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>{t('adminBadge')}</div>
           <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 26, color: '#12262B', margin: 0, letterSpacing: '-0.02em' }}>
-            Review Submissions
+            {t('pageTitle')}
           </h1>
         </div>
 
@@ -92,17 +95,17 @@ export default function AdminReviewPage() {
           </div>
         )}
 
-        {loading && <p style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading…</p>}
+        {loading && <p style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('loadingLabel')}</p>}
 
         {/* --- Place submissions --- */}
         {!loading && (
           <>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.08em', margin: '8px 0 12px' }}>
-              PENDING PLACES ({submissions.length})
+              {t('pendingPlacesLabel')} ({submissions.length})
             </div>
             {submissions.length === 0 && (
               <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, marginBottom: 32 }}>
-                <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>Nothing pending review right now.</p>
+                <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>{t('nothingPendingReview')}</p>
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 32 }}>
@@ -112,13 +115,13 @@ export default function AdminReviewPage() {
                     <div>
                       <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B' }}>{s.name}</div>
                       <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                        {s.place_type || 'unspecified type'} · {s.district || 'unspecified district'}
+                        {s.place_type || t('unspecifiedType')} · {s.district || t('unspecifiedDistrict')}
                         {s.local_body ? ` · ${s.local_body}` : ''}
                       </div>
                       <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', marginTop: 4 }}>
-                        Submitted by: {s.submitter_name || s.submitter_email
+                        {t('submittedByPrefix')} {s.submitter_name || s.submitter_email
                           ? `${s.submitter_name || ''}${s.submitter_name && s.submitter_email ? ' · ' : ''}${s.submitter_email || ''}`
-                          : 'Anonymous / not logged in'}
+                          : t('anonymousNotLoggedIn')}
                       </div>
                     </div>
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>
@@ -136,14 +139,14 @@ export default function AdminReviewPage() {
                       disabled={actingOn === `place-${s.id}`}
                       style={{ padding: '8px 16px', background: '#1F6F64', border: 'none', borderRadius: 2, color: '#F2F4EF', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, cursor: actingOn === `place-${s.id}` ? 'wait' : 'pointer' }}
                     >
-                      Approve
+                      {t('approveButton')}
                     </button>
                     <button
                       onClick={() => handleReject(s.id)}
                       disabled={actingOn === `place-${s.id}`}
                       style={{ padding: '8px 16px', background: 'none', border: '1px solid rgba(181,74,42,0.4)', borderRadius: 2, color: '#B54A2A', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, cursor: actingOn === `place-${s.id}` ? 'wait' : 'pointer' }}
                     >
-                      Reject
+                      {t('rejectButton')}
                     </button>
                   </div>
                 </div>
@@ -153,11 +156,11 @@ export default function AdminReviewPage() {
             {/* --- Shelter submissions -- separate queue, see db/models.py's Shelter docstring
                 for why these need verification before appearing on the public Shelters page --- */}
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.08em', margin: '8px 0 12px' }}>
-              PENDING SHELTERS ({shelters.length})
+              {t('pendingSheltersLabel')} ({shelters.length})
             </div>
             {shelters.length === 0 && (
               <div style={{ padding: '24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
-                <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>Nothing pending review right now.</p>
+                <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>{t('nothingPendingReview')}</p>
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -167,10 +170,10 @@ export default function AdminReviewPage() {
                     <div>
                       <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B' }}>{s.name}</div>
                       <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                        {s.district}{s.capacity ? ` · capacity ~${s.capacity}` : ''}
+                        {s.district}{s.capacity ? ` · ${t('capacityPrefix')}${s.capacity}` : ''}
                       </div>
                       <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', marginTop: 4 }}>
-                        Submitted by: {s.submitter_name || s.submitter_email || 'Unknown'}
+                        {t('submittedByPrefix')} {s.submitter_name || s.submitter_email || t('unknownSubmitter')}
                       </div>
                     </div>
                     <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED }}>
@@ -186,14 +189,14 @@ export default function AdminReviewPage() {
                       disabled={actingOn === `shelter-${s.id}`}
                       style={{ padding: '8px 16px', background: '#1F6F64', border: 'none', borderRadius: 2, color: '#F2F4EF', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, cursor: actingOn === `shelter-${s.id}` ? 'wait' : 'pointer' }}
                     >
-                      Approve
+                      {t('approveButton')}
                     </button>
                     <button
                       onClick={() => handleRejectShelter(s.id)}
                       disabled={actingOn === `shelter-${s.id}`}
                       style={{ padding: '8px 16px', background: 'none', border: '1px solid rgba(181,74,42,0.4)', borderRadius: 2, color: '#B54A2A', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, cursor: actingOn === `shelter-${s.id}` ? 'wait' : 'pointer' }}
                     >
-                      Reject
+                      {t('rejectButton')}
                     </button>
                   </div>
                 </div>

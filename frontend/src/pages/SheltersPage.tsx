@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchAllShelters, fetchHelplines, submitShelter, distanceKm, directionsUrl, type ShelterInfo, isLoggedIn } from '../lib/api';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/shelters';
 
 const MUTED = '#4a5e62';
 
@@ -11,6 +13,7 @@ interface HelplineContact {
 }
 
 export default function SheltersPage() {
+  const t = useT(dict);
   const [shelters, setShelters] = useState<ShelterInfo[]>([]);
   const [helplines, setHelplines] = useState<HelplineContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +45,7 @@ export default function SheltersPage() {
 
   const findNearMe = () => {
     if (!navigator.geolocation) {
-      setLocError('Your browser does not support location access.');
+      setLocError(t('noLocationSupport'));
       return;
     }
     setLocLoading(true);
@@ -53,7 +56,7 @@ export default function SheltersPage() {
         setLocLoading(false);
       },
       () => {
-        setLocError('Could not get your location -- check your browser/device location permission.');
+        setLocError(t('locationDenied'));
         setLocLoading(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -75,7 +78,7 @@ export default function SheltersPage() {
 
   const useMyLocationForForm = () => {
     if (!navigator.geolocation) {
-      setFormError('Your browser does not support location access.');
+      setFormError(t('noLocationSupport'));
       return;
     }
     setFormLocating(true);
@@ -86,7 +89,7 @@ export default function SheltersPage() {
         setFormLocating(false);
       },
       () => {
-        setFormError('Could not get your location -- check your browser/device location permission.');
+        setFormError(t('locationDenied'));
         setFormLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -95,11 +98,11 @@ export default function SheltersPage() {
 
   const handleShelterSubmit = async () => {
     if (!formName.trim() || !formDistrict.trim()) {
-      setFormError('Name and district are required.');
+      setFormError(t('nameDistrictRequired'));
       return;
     }
     if (!formCoords) {
-      setFormError('Location is required -- tap "Use my location" first.');
+      setFormError(t('locationRequired'));
       return;
     }
     setFormSubmitting(true);
@@ -117,7 +120,7 @@ export default function SheltersPage() {
       setShowForm(false);
       setTimeout(() => setFormSubmitted(false), 5000);
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Could not submit.');
+      setFormError(e instanceof Error ? e.message : t('couldNotSubmit'));
     } finally {
       setFormSubmitting(false);
     }
@@ -127,11 +130,11 @@ export default function SheltersPage() {
     <div style={{ minHeight: '100vh', background: '#F2F4EF' }}>
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px' }}>
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>
-          RELIEF CAMPS
+          {t('reliefCampsBadge')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: 12, marginBottom: 24 }}>
           <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 28, color: '#12262B', margin: 0, letterSpacing: '-0.02em' }}>
-            Shelters
+            {t('pageTitle')}
           </h1>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
             {shelters.length > 0 && (
@@ -144,7 +147,7 @@ export default function SheltersPage() {
                   cursor: locLoading ? 'wait' : 'pointer', letterSpacing: '0.02em',
                 }}
               >
-                {locLoading ? 'Locating…' : userLoc ? '📍 Sorted by distance' : '📍 Find nearest to me'}
+                {locLoading ? t('locating') : userLoc ? t('sortedByDistance') : t('findNearestToMe')}
               </button>
             )}
             <button
@@ -156,14 +159,14 @@ export default function SheltersPage() {
                 cursor: 'pointer', letterSpacing: '0.02em',
               }}
             >
-              + Suggest a Shelter
+              {t('suggestAShelter')}
             </button>
           </div>
         </div>
 
         {formSubmitted && (
           <div style={{ padding: '10px 16px', marginBottom: 16, background: 'rgba(31,111,100,0.08)', border: '1px solid rgba(31,111,100,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64' }}>
-            Thank you — submitted for admin review. It'll appear here once confirmed.
+            {t('thankYouSubmitted')}
           </div>
         )}
 
@@ -171,28 +174,28 @@ export default function SheltersPage() {
           <div style={{ padding: 20, background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, marginBottom: 24 }}>
             {!isLoggedIn() ? (
               <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>
-                Sign in to suggest a shelter -- submissions are tied to an account so admins can follow up if needed.
+                {t('signInToSuggest')}
               </p>
             ) : (
               <>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginBottom: 12, letterSpacing: '0.06em' }}>
-                  SUGGEST A SHELTER — reviewed by an admin before it appears publicly
+                  {t('suggestFormHeading')}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
                   <input
                     value={formName} onChange={(e) => setFormName(e.target.value)}
-                    placeholder="Name (e.g. Govt. HS Thrikkakara)"
+                    placeholder={t('namePlaceholder')}
                     style={{ padding: 10, border: '1px solid rgba(18,38,43,0.15)', borderRadius: 3, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13 }}
                   />
                   <input
                     value={formDistrict} onChange={(e) => setFormDistrict(e.target.value)}
-                    placeholder="District"
+                    placeholder={t('districtPlaceholder')}
                     style={{ padding: 10, border: '1px solid rgba(18,38,43,0.15)', borderRadius: 3, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13 }}
                   />
                 </div>
                 <input
                   value={formCapacity} onChange={(e) => setFormCapacity(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Approx. capacity (optional)"
+                  placeholder={t('capacityPlaceholder')}
                   style={{ width: '100%', padding: 10, border: '1px solid rgba(18,38,43,0.15)', borderRadius: 3, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, marginBottom: 12, boxSizing: 'border-box' as const }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' as const }}>
@@ -206,7 +209,7 @@ export default function SheltersPage() {
                       color: formCoords ? '#1F6F64' : '#12262B', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12,
                     }}
                   >
-                    {formLocating ? 'Locating…' : formCoords ? `✓ Location set (${formCoords.lat.toFixed(3)}, ${formCoords.lon.toFixed(3)})` : '📍 Use my location'}
+                    {formLocating ? t('locating') : formCoords ? `${t('locationSetPrefix')}${formCoords.lat.toFixed(3)}, ${formCoords.lon.toFixed(3)})` : t('useMyLocation')}
                   </button>
                   <button
                     onClick={handleShelterSubmit}
@@ -216,7 +219,7 @@ export default function SheltersPage() {
                       background: '#1F6F64', color: '#F2F4EF', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12,
                     }}
                   >
-                    {formSubmitting ? 'Submitting…' : 'Submit for Review'}
+                    {formSubmitting ? t('submitting') : t('submitForReview')}
                   </button>
                 </div>
                 {formError && <div style={{ marginTop: 10, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#B54A2A' }}>{formError}</div>}
@@ -233,7 +236,7 @@ export default function SheltersPage() {
 
         {loading && (
           <div style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading…</span>
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('loadingLabel')}</span>
           </div>
         )}
 
@@ -245,13 +248,10 @@ export default function SheltersPage() {
           <div style={{ background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, overflow: 'hidden' }}>
             <div style={{ padding: '32px 24px', textAlign: 'center' }}>
               <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B', marginBottom: 8 }}>
-                No shelters in our records right now
+                {t('noSheltersTitle')}
               </div>
               <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: '0 auto', maxWidth: 480, lineHeight: 1.6 }}>
-                This isn't the same as "no emergency" -- relief camps in Kerala are designated by
-                district authorities only once an emergency is actually declared, so there's no
-                standing public list to show in advance. If you need a shelter right now, contact
-                your district's disaster management control room directly:
+                {t('noSheltersBody')}
               </p>
             </div>
             {disasterManagementContacts.length > 0 && (
@@ -294,15 +294,15 @@ export default function SheltersPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', flexWrap: 'wrap' as const, gap: 8 }}>
                   <div>
                     <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B' }}>
-                      {s.name} {i === 0 && userLoc && <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64', marginLeft: 6 }}>NEAREST</span>}
+                      {s.name} {i === 0 && userLoc && <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64', marginLeft: 6 }}>{t('nearestBadge')}</span>}
                     </div>
                     <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginTop: 4 }}>
-                      {s.district}{dist !== null ? ` · ${dist.toFixed(1)} km away` : ''}
+                      {s.district}{dist !== null ? ` · ${dist.toFixed(1)}${t('kmAwaySuffix')}` : ''}
                     </div>
                     <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 12, color: full ? '#B54A2A' : MUTED, marginTop: 6 }}>
                       {s.capacity != null
-                        ? `Capacity: ${s.current_occupancy ?? '?'} / ${s.capacity}${full ? ' -- FULL' : ''}`
-                        : 'Capacity not reported'}
+                        ? `${t('capacityPrefix')} ${s.current_occupancy ?? '?'} / ${s.capacity}${full ? t('fullSuffix') : ''}`
+                        : t('capacityNotReported')}
                     </div>
                   </div>
                   <a
@@ -311,7 +311,7 @@ export default function SheltersPage() {
                     rel="noopener noreferrer"
                     style={{ padding: '8px 16px', background: 'rgba(31,111,100,0.1)', border: '1px solid rgba(31,111,100,0.4)', borderRadius: 2, color: '#1F6F64', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 600, textDecoration: 'none', letterSpacing: '0.04em', whiteSpace: 'nowrap' as const }}
                   >
-                    DIRECTIONS →
+                    {t('directionsButton')}
                   </a>
                 </div>
               </div>

@@ -3,6 +3,9 @@ import { type Page } from '../App';
 import { getCurrentUser, adminLogin } from '../lib/api';
 import useIsMobile from '../hooks/useIsMobile';
 import Logo from './Logo';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/nav';
+import { useLanguage, LANGUAGES } from '../i18n/context';
 
 interface NavProps {
   navigate: (page: Page) => void;
@@ -14,17 +17,17 @@ interface NavProps {
   onAdminLogout: () => void;
 }
 
-const navItems: { page: Page; label: string; icon: string }[] = [
-  { page: 'home', label: 'Search', icon: '◈' },
-  { page: 'dashboard', label: 'GIS Map', icon: '⊞' },
-  { page: 'alerts', label: 'Alerts', icon: '⚠' },
-  { page: 'dams', label: 'Dams', icon: '≈' },
-  { page: 'shelters', label: 'Shelters', icon: '⛨' },
-  { page: 'incidents', label: 'Reports', icon: '✎' },
-  { page: 'analytics', label: 'Analytics', icon: '▣' },
-  { page: 'news', label: 'News', icon: '▤' },
-  { page: 'damage', label: 'Damage', icon: '◉' },
-  { page: 'submit', label: 'Submit Place', icon: '+' },
+const navItems: { page: Page; labelKey: string; icon: string }[] = [
+  { page: 'home', labelKey: 'search', icon: '◈' },
+  { page: 'dashboard', labelKey: 'gisMap', icon: '⊞' },
+  { page: 'alerts', labelKey: 'alerts', icon: '⚠' },
+  { page: 'dams', labelKey: 'dams', icon: '≈' },
+  { page: 'shelters', labelKey: 'shelters', icon: '⛨' },
+  { page: 'incidents', labelKey: 'reports', icon: '✎' },
+  { page: 'analytics', labelKey: 'analytics', icon: '▣' },
+  { page: 'news', labelKey: 'news', icon: '▤' },
+  { page: 'damage', labelKey: 'damage', icon: '◉' },
+  { page: 'submit', labelKey: 'submitPlace', icon: '+' },
 ];
 
 const MUTED_ADMIN = '#8a9a9d';
@@ -40,6 +43,7 @@ function initials(name: string | null, email: string): string {
 }
 
 function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; onLogin: () => void; onLogout: () => void }) {
+  const t = useT(dict);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -60,7 +64,7 @@ function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; o
           cursor: 'pointer', color: '#F2F4EF', fontSize: 12,
           fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, letterSpacing: '0.04em',
         }}
-      >Sign in</button>
+      >{t('signIn')}</button>
     );
   }
 
@@ -101,7 +105,7 @@ function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; o
             onClick={() => { setOpen(false); onLogout(); }}
             style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'none', border: 'none', cursor: 'pointer', color: '#B54A2A', fontFamily: 'IBM Plex Mono, monospace', fontSize: 12 }}
           >
-            Sign out
+            {t('signOut')}
           </button>
         </div>
       )}
@@ -110,6 +114,7 @@ function AuthControl({ isLoggedIn, onLogin, onLogout }: { isLoggedIn: boolean; o
 }
 
 function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: boolean; onAdminLoggedIn: () => void; onAdminLogout: () => void }) {
+  const t = useT(dict);
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -122,7 +127,7 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
         onClick={onAdminLogout}
         style={{ width: '100%', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED_ADMIN, background: 'none', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 3, padding: '6px 8px', cursor: 'pointer', letterSpacing: '0.04em', textAlign: 'left' }}
       >
-        Admin · sign out
+        {t('adminSignOut')}
       </button>
     );
   }
@@ -133,7 +138,7 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
         onClick={() => setShowForm((s) => !s)}
         style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED_ADMIN, background: 'none', border: 'none', cursor: 'pointer', letterSpacing: '0.04em', opacity: 0.6, padding: 0 }}
       >
-        Admin
+        {t('admin')}
       </button>
       {showForm && (
         <form
@@ -147,7 +152,7 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
               setEmail(''); setPassword('');
               onAdminLoggedIn();
             } catch (err) {
-              setError(err instanceof Error ? err.message : 'Login failed.');
+              setError(err instanceof Error ? err.message : t('loginFailed'));
             } finally {
               setSubmitting(false);
             }
@@ -160,11 +165,11 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
           }}
         >
           <input
-            type="email" required placeholder="Admin email" value={email} onChange={(e) => setEmail(e.target.value)}
+            type="email" required placeholder={t('adminEmailPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)}
             style={{ padding: '7px 10px', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, outline: 'none' }}
           />
           <input
-            type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)}
+            type="password" required placeholder={t('passwordPlaceholder')} value={password} onChange={(e) => setPassword(e.target.value)}
             style={{ padding: '7px 10px', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, outline: 'none' }}
           />
           {error && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#B54A2A' }}>{error}</div>}
@@ -172,7 +177,7 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
             type="submit" disabled={submitting}
             style={{ padding: '8px', background: '#1F6F64', border: 'none', borderRadius: 2, color: '#F2F4EF', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, cursor: submitting ? 'wait' : 'pointer' }}
           >
-            {submitting ? '...' : 'Log in'}
+            {submitting ? t('loggingIn') : t('logIn')}
           </button>
         </form>
       )}
@@ -185,7 +190,41 @@ function AdminControl({ isAdmin, onAdminLoggedIn, onAdminLogout }: { isAdmin: bo
  * controls panel expands and fades on hover. The logo itself is also a click target that
  * jumps home, and hovering the rail (not just a thin 10px edge) opens the full panel, which
  * is a more forgiving hover target than before. */
+function LanguageSwitcher() {
+  const { lang, setLang } = useLanguage();
+  const t = useT(dict);
+  return (
+    <div>
+      <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED_ADMIN, letterSpacing: '0.08em', marginBottom: 6, opacity: 0.8 }}>
+        {t('language')}
+      </div>
+      <div style={{ display: 'flex', gap: 4 }}>
+        {LANGUAGES.map(({ code, nativeLabel, label }) => (
+          <button
+            key={code}
+            onClick={() => setLang(code)}
+            title={label}
+            aria-pressed={lang === code}
+            style={{
+              flex: 1, padding: '6px 4px',
+              background: lang === code ? '#1F6F64' : 'none',
+              color: lang === code ? '#F2F4EF' : '#4a5e62',
+              border: `1px solid ${lang === code ? '#1F6F64' : 'rgba(18,38,43,0.15)'}`,
+              borderRadius: 3, cursor: 'pointer',
+              fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, fontWeight: 600,
+              transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+            }}
+          >
+            {nativeLabel}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, onAdminLoggedIn, onAdminLogout }: NavProps) {
+  const t = useT(dict);
   const isMobile = useIsMobile(900);
   const [hovered, setHovered] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -196,7 +235,7 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
     setMobileOpen(false);
   };
 
-  const items = isAdmin ? [...navItems, { page: 'admin' as Page, label: 'Review', icon: '✓' }] : navItems;
+  const items = isAdmin ? [...navItems, { page: 'admin' as Page, labelKey: 'review', icon: '✓' }] : navItems;
 
   return (
     <>
@@ -216,7 +255,7 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
           <button
             onClick={() => goTo('home')}
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, borderRadius: 6, overflow: 'hidden', lineHeight: 0 }}
-            aria-label="DIP/Kerala home"
+            aria-label={t('homeAriaLabel')}
           >
             <Logo size={32} />
           </button>
@@ -227,12 +266,12 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
           shown alongside a small always-visible logo mark too. */}
       {isMobile && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 52, zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px', background: 'rgba(242,244,239,0.95)', borderBottom: '1px solid rgba(18,38,43,0.08)' }}>
-          <button onClick={() => goTo('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 0 }} aria-label="DIP/Kerala home">
+          <button onClick={() => goTo('home')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 0 }} aria-label={t('homeAriaLabel')}>
             <Logo size={28} />
           </button>
           <button
             onClick={() => setMobileOpen((o) => !o)}
-            aria-label="Menu"
+            aria-label={t('menu')}
             style={{
               width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#ffffff', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 6,
@@ -265,7 +304,7 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
         }}
       >
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {items.map(({ page, label, icon }) => (
+          {items.map(({ page, labelKey, icon }) => (
             <button
               key={page}
               onClick={() => goTo(page)}
@@ -286,12 +325,13 @@ export default function Nav({ navigate, isLoggedIn, onLogin, onLogout, isAdmin, 
               }}
             >
               <span style={{ fontSize: 12, width: 16, textAlign: 'center' }}>{icon}</span>
-              {label}
+              {t(labelKey)}
             </button>
           ))}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 16, borderTop: '1px solid rgba(18,38,43,0.1)' }}>
+          <LanguageSwitcher />
           <AdminControl isAdmin={isAdmin} onAdminLoggedIn={onAdminLoggedIn} onAdminLogout={onAdminLogout} />
           <AuthControl isLoggedIn={isLoggedIn} onLogin={onLogin} onLogout={onLogout} />
         </div>

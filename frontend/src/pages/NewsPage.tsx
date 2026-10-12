@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchNews } from '../lib/api';
+import { useT, type TFunc } from '../i18n/useT';
+import { dict } from '../i18n/dict/news';
 
 const MUTED = '#4a5e62';
 
@@ -13,17 +15,18 @@ interface NewsArticle {
   is_kerala?: boolean;
 }
 
-function timeAgo(iso: string | null): string {
+function timeAgo(iso: string | null, t: TFunc): string {
   if (!iso) return '';
   const diffMs = Date.now() - new Date(iso).getTime();
   const hrs = Math.floor(diffMs / 3_600_000);
-  if (hrs < 1) return 'Just now';
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 1) return t('justNow');
+  if (hrs < 24) return `${hrs}${t('hoursAgoSuffix')}`;
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return `${days}${t('daysAgoSuffix')}`;
 }
 
 export default function NewsPage() {
+  const t = useT(dict);
   const [articles, setArticles] = useState<NewsArticle[]>([]);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +38,7 @@ export default function NewsPage() {
         setArticles(d.results || []);
         setLastRefreshed(d.last_refreshed || null);
       })
-      .catch(() => setError('Could not load the news feed right now. Please try again shortly.'))
+      .catch(() => setError(t('couldNotLoadNews')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -44,15 +47,15 @@ export default function NewsPage() {
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 64px' }}>
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>
-            LIVE FEED — DISASTER NEWS
+            {t('liveFeedBadge')}
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap' as const, gap: 8 }}>
             <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 28, color: '#12262B', margin: 0, letterSpacing: '-0.02em' }}>
-              News
+              {t('pageTitle')}
             </h1>
             {lastRefreshed && (
               <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED }}>
-                Updated {timeAgo(lastRefreshed)}
+                {t('updatedPrefix')} {timeAgo(lastRefreshed, t)}
               </span>
             )}
           </div>
@@ -60,7 +63,7 @@ export default function NewsPage() {
 
         {loading && (
           <div style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading news…</span>
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('loadingNews')}</span>
           </div>
         )}
 
@@ -73,10 +76,10 @@ export default function NewsPage() {
         {!loading && !error && articles.length === 0 && (
           <div style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
             <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B', marginBottom: 8 }}>
-              No articles yet
+              {t('noArticlesTitle')}
             </div>
             <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 14, color: MUTED, margin: 0 }}>
-              No Kerala flood, landslide, or disaster news at the moment — check back shortly.
+              {t('noArticlesBody')}
             </p>
           </div>
         )}
@@ -121,11 +124,11 @@ export default function NewsPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.06em' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       {a.is_kerala && (
-                        <span style={{ color: '#1F6F64', background: 'rgba(31,111,100,0.1)', padding: '1px 6px', borderRadius: 1, fontWeight: 600 }}>KERALA</span>
+                        <span style={{ color: '#1F6F64', background: 'rgba(31,111,100,0.1)', padding: '1px 6px', borderRadius: 1, fontWeight: 600 }}>{t('keralaBadge')}</span>
                       )}
-                      {(a.source_name || 'UNKNOWN SOURCE').toUpperCase()}
+                      {(a.source_name || t('unknownSource')).toUpperCase()}
                     </span>
-                    <span>{timeAgo(a.published_at)}</span>
+                    <span>{timeAgo(a.published_at, t)}</span>
                   </div>
                   <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 15, color: '#12262B', lineHeight: 1.3 }}>
                     {a.title}

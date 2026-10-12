@@ -1,26 +1,32 @@
 import { useState, useEffect } from 'react';
 import { submitIncidentReport, fetchRecentIncidents, type IncidentReport, type IncidentType } from '../lib/api';
+import { useT, type TFunc } from '../i18n/useT';
+import { dict } from '../i18n/dict/incidents';
 
 const MUTED = '#4a5e62';
 
-const TYPE_LABELS: Record<IncidentType, string> = {
-  flood: 'Flooding',
-  landslide: 'Landslide',
-  road_blocked: 'Road Blocked',
-  other: 'Other',
-};
+function getTypeLabels(t: TFunc): Record<IncidentType, string> {
+  return {
+    flood: t('typeFlood'),
+    landslide: t('typeLandslide'),
+    road_blocked: t('typeRoadBlocked'),
+    other: t('typeOther'),
+  };
+}
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: TFunc): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60_000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('justNow');
+  if (mins < 60) return `${mins}${t('minsAgoSuffix')}`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return `${hrs}${t('hoursAgoSuffix')}`;
+  return `${Math.floor(hrs / 24)}${t('daysAgoSuffix')}`;
 }
 
 export default function IncidentsPage() {
+  const t = useT(dict);
+  const TYPE_LABELS = getTypeLabels(t);
   const [reports, setReports] = useState<IncidentReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [note, setNote] = useState('');
@@ -49,7 +55,7 @@ export default function IncidentsPage() {
 
   const getLocation = () => {
     if (!navigator.geolocation) {
-      setLocError('Your browser does not support location access.');
+      setLocError(t('noLocationSupport'));
       return;
     }
     setLocating(true);
@@ -60,7 +66,7 @@ export default function IncidentsPage() {
         setLocating(false);
       },
       () => {
-        setLocError('Could not get your location -- check your browser/device location permission.');
+        setLocError(t('locationDenied'));
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
@@ -69,7 +75,7 @@ export default function IncidentsPage() {
 
   const handleSubmit = async () => {
     if (!coords) {
-      setSubmitError('Location is required -- tap "Use my location" first.');
+      setSubmitError(t('locationRequired'));
       return;
     }
     setSubmitting(true);
@@ -82,7 +88,7 @@ export default function IncidentsPage() {
       loadReports();
       setTimeout(() => setSubmitted(false), 4000);
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : 'Could not submit report.');
+      setSubmitError(e instanceof Error ? e.message : t('couldNotSubmitReport'));
     } finally {
       setSubmitting(false);
     }
@@ -92,29 +98,29 @@ export default function IncidentsPage() {
     <div style={{ minHeight: '100vh', background: '#F2F4EF' }}>
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px' }}>
         <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.12em', marginBottom: 8 }}>
-          COMMUNITY REPORTS -- UNVERIFIED
+          {t('communityReportsBadge')}
         </div>
         <h1 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 28, color: '#12262B', margin: '0 0 24px', letterSpacing: '-0.02em' }}>
-          Report an Incident
+          {t('pageTitle')}
         </h1>
 
         {/* Submission form */}
         <div style={{ padding: 20, background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, marginBottom: 32 }}>
-          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginBottom: 10, letterSpacing: '0.06em' }}>WHAT ARE YOU SEEING?</div>
+          <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, marginBottom: 10, letterSpacing: '0.06em' }}>{t('whatAreYouSeeing')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, marginBottom: 16 }}>
-            {(Object.keys(TYPE_LABELS) as IncidentType[]).map((t) => (
+            {(Object.keys(TYPE_LABELS) as IncidentType[]).map((typeKey) => (
               <button
-                key={t}
-                onClick={() => setIncidentType(t)}
+                key={typeKey}
+                onClick={() => setIncidentType(typeKey)}
                 style={{
                   padding: '8px 16px', borderRadius: 2, cursor: 'pointer',
                   fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
-                  background: incidentType === t ? '#1F6F64' : '#ffffff',
-                  color: incidentType === t ? '#F2F4EF' : MUTED,
-                  border: `1px solid ${incidentType === t ? '#1F6F64' : 'rgba(18,38,43,0.2)'}`,
+                  background: incidentType === typeKey ? '#1F6F64' : '#ffffff',
+                  color: incidentType === typeKey ? '#F2F4EF' : MUTED,
+                  border: `1px solid ${incidentType === typeKey ? '#1F6F64' : 'rgba(18,38,43,0.2)'}`,
                 }}
               >
-                {TYPE_LABELS[t]}
+                {TYPE_LABELS[typeKey]}
               </button>
             ))}
           </div>
@@ -122,7 +128,7 @@ export default function IncidentsPage() {
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Optional: describe what you're seeing (e.g. 'water rising near the bus stand')"
+            placeholder={t('descriptionPlaceholder')}
             maxLength={500}
             rows={3}
             style={{
@@ -144,7 +150,7 @@ export default function IncidentsPage() {
                 fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 13,
               }}
             >
-              {locating ? 'Locating…' : coords ? `✓ Location set (${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)})` : '📍 Use my location'}
+              {locating ? t('locating') : coords ? `${t('locationSetPrefix')}${coords.lat.toFixed(3)}, ${coords.lon.toFixed(3)})` : t('useMyLocation')}
             </button>
 
             <button
@@ -157,18 +163,18 @@ export default function IncidentsPage() {
                 color: '#ffffff', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 13,
               }}
             >
-              {submitting ? 'Submitting…' : 'Submit Report'}
+              {submitting ? t('submitting') : t('submitReport')}
             </button>
           </div>
 
           {locError && <div style={{ marginTop: 12, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#B54A2A' }}>{locError}</div>}
           {submitError && <div style={{ marginTop: 12, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#B54A2A' }}>{submitError}</div>}
-          {submitted && <div style={{ marginTop: 12, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64' }}>Report submitted -- thank you.</div>}
+          {submitted && <div style={{ marginTop: 12, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64' }}>{t('reportSubmittedThanks')}</div>}
         </div>
 
         {/* Recent reports feed */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
-          <h2 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 18, color: '#12262B', margin: 0 }}>Recent Community Reports</h2>
+          <h2 style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 18, color: '#12262B', margin: 0 }}>{t('recentCommunityReports')}</h2>
         </div>
         {note && (
           <div style={{ padding: '10px 16px', marginBottom: 16, background: 'rgba(217,154,43,0.08)', border: '1px solid rgba(217,154,43,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 12, color: '#8a6216' }}>
@@ -176,21 +182,21 @@ export default function IncidentsPage() {
           </div>
         )}
 
-        {loading && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>Loading…</div>}
+        {loading && <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('loadingLabel')}</div>}
         {!loading && reports.length === 0 && (
           <div style={{ padding: '32px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
-            No community reports in the last 48 hours.
+            {t('noReportsNotice')}
           </div>
         )}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {reports.map((r) => (
             <div key={r.id} style={{ padding: '14px 18px', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderLeft: '3px solid #D99A2B', borderRadius: 2 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.06em', marginBottom: 6 }}>
-                <span style={{ color: '#D99A2B', fontWeight: 600 }}>{TYPE_LABELS[r.incident_type].toUpperCase()} · UNVERIFIED</span>
-                <span>{timeAgo(r.created_at)}</span>
+                <span style={{ color: '#D99A2B', fontWeight: 600 }}>{TYPE_LABELS[r.incident_type].toUpperCase()}{t('unverifiedSuffix')}</span>
+                <span>{timeAgo(r.created_at, t)}</span>
               </div>
               <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 14, color: '#12262B', marginBottom: 4 }}>
-                {r.district || 'Location reported'}
+                {r.district || t('locationReported')}
               </div>
               {r.description && (
                 <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED, margin: 0 }}>{r.description}</p>

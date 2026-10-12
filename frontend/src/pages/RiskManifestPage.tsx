@@ -3,6 +3,8 @@ import { riskColor, type RiskLevel } from '../data/mockData';
 import { fetchAllPlaces, fetchAreaRisk, type RealRiskResult } from '../lib/api';
 import { type Page } from '../App';
 import useIsMobile from '../hooks/useIsMobile';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/riskManifest';
 
 interface RiskManifestPageProps {
   placeId: number;
@@ -13,12 +15,13 @@ const MUTED = '#4a5e62';
 const CARD = { background: '#ffffff', border: '1px solid rgba(18,38,43,0.09)', borderRadius: 2 } as const;
 
 function RiskGauge({ value, level }: { value: number; level: RiskLevel }) {
+  const t = useT(dict);
   const pct = Math.round(value * 100);
   const color = riskColor[level];
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.06em' }}>FLOOD PROBABILITY</span>
+        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.06em' }}>{t('floodProbability')}</span>
         <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 18, fontWeight: 600, color }}>{pct}%</span>
       </div>
       <div style={{ height: 6, background: 'rgba(18,38,43,0.07)', borderRadius: 2, overflow: 'hidden' }}>
@@ -53,16 +56,17 @@ function TerrainRow({ label, value }: { label: string; value: string }) {
 }
 
 function ReliabilityCell({ accuracy }: { accuracy: number | null }) {
+  const t = useT(dict);
   const low = accuracy !== null && accuracy < 0.4;
   return (
     <div style={{ marginTop: 14, padding: '8px 12px', background: low ? 'rgba(181,74,42,0.06)' : 'rgba(18,38,43,0.03)', borderRadius: 2 }}>
-      <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.08em', marginBottom: 4 }}>PREDICTION RELIABILITY</div>
+      <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.08em', marginBottom: 4 }}>{t('predictionReliability')}</div>
       <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: low ? '#B54A2A' : '#12262B', fontWeight: 500 }}>
-        {accuracy === null ? 'N/A' : `${(accuracy * 100).toFixed(1)}%`}
+        {accuracy === null ? t('notAvailable') : `${(accuracy * 100).toFixed(1)}%`}
       </div>
       {low && (
         <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: '#B54A2A', marginTop: 4, lineHeight: 1.4 }}>
-          Treat this as an indicative signal rather than a precise forecast for this specific location.
+          {t('indicativeSignalNotice')}
         </div>
       )}
     </div>
@@ -70,6 +74,7 @@ function ReliabilityCell({ accuracy }: { accuracy: number | null }) {
 }
 
 export default function RiskManifestPage({ placeId, navigate }: RiskManifestPageProps) {
+  const t = useT(dict);
   const isMobile = useIsMobile();
   const [result, setResult] = useState<RealRiskResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +99,7 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
   if (loading) {
     return (
       <div style={{ minHeight: '40vh', background: '#F2F4EF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ fontFamily: 'IBM Plex Mono, monospace', color: MUTED }}>Fetching live risk data...</p>
+        <p style={{ fontFamily: 'IBM Plex Mono, monospace', color: MUTED }}>{t('fetchingRiskData')}</p>
       </div>
     );
   }
@@ -104,9 +109,9 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
       <div style={{ minHeight: '60vh', background: '#F2F4EF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontSize: 18, color: '#12262B', marginBottom: 8 }}>
-            {error || 'Place not found'}
+            {error || t('placeNotFound')}
           </div>
-          <button onClick={() => navigate('home')} style={{ color: '#1F6F64', fontFamily: 'IBM Plex Mono, monospace', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>← Return to search</button>
+          <button onClick={() => navigate('home')} style={{ color: '#1F6F64', fontFamily: 'IBM Plex Mono, monospace', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>{t('returnToSearch')}</button>
         </div>
       </div>
     );
@@ -119,11 +124,11 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
     .find((l) => result.floodRiskLevel === l || result.landslideRiskLevel === l) || 'Low';
 
   const typeLabel: Record<string, string> = {
-    gram_panchayat: 'Gram Panchayat',
-    municipality: 'Municipality',
-    municipal_corporation: 'Municipal Corporation',
-    city: 'City / Town',
-    local_area: 'Local Area',
+    gram_panchayat: t('typeGramPanchayat'),
+    municipality: t('typeMunicipality'),
+    municipal_corporation: t('typeMunicipalCorporation'),
+    city: t('typeCityTown'),
+    local_area: t('typeLocalArea'),
   };
 
   return (
@@ -131,7 +136,7 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '20px 16px 48px' : '32px 24px 64px' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, flexWrap: 'wrap' as const }}>
-          <button onClick={() => navigate('home')} style={{ color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>← SEARCH</button>
+          <button onClick={() => navigate('home')} style={{ color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit' }}>{t('searchBreadcrumb')}</button>
           <span>/</span><span>{place.district.toUpperCase()}</span><span>/</span>
           <span style={{ color: '#12262B' }}>{place.name.toUpperCase()}</span>
         </div>
@@ -157,7 +162,7 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' as const }}>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.12em', padding: '3px 8px', border: '1px solid rgba(18,38,43,0.15)', borderRadius: 1 }}>
-                  RISK MANIFEST
+                  {t('riskManifestBadge')}
                 </div>
                 <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.08em' }}>
                   {typeLabel[place.type]?.toUpperCase() || place.type.toUpperCase()}
@@ -167,7 +172,7 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
                 {place.name}
               </h1>
               <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 14, color: MUTED, marginBottom: 14 }}>
-                {place.nameMalayalam ? `${place.nameMalayalam} · ` : ''}{place.district} District
+                {place.nameMalayalam ? `${place.nameMalayalam} · ` : ''}{place.district} {t('districtSuffix')}
               </div>
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.04em' }}>
                 {place.lat.toFixed(5)}°N · {place.lon.toFixed(5)}°E · {place.elevation.toFixed(0)}m ASL
@@ -175,12 +180,12 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
             </div>
 
             <div style={{ textAlign: isMobile ? 'left' : 'right', borderLeft: isMobile ? 'none' : '1px solid rgba(18,38,43,0.08)', paddingLeft: isMobile ? 0 : 28, paddingTop: isMobile ? 12 : 0, borderTop: isMobile ? '1px solid rgba(18,38,43,0.08)' : 'none' }}>
-              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.1em', marginBottom: 4 }}>ISSUED</div>
+              <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 9, color: MUTED, letterSpacing: '0.1em', marginBottom: 4 }}>{t('issuedLabel')}</div>
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: '#12262B' }}>
                 {new Date(result.queriedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
               </div>
               <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 13, color: '#12262B', marginBottom: 14 }}>
-                {new Date(result.queriedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })} IST
+                {new Date(result.queriedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false })} {t('istSuffix')}
               </div>
               <div style={{ display: 'inline-block', padding: '4px 12px', border: `2px solid ${riskColor[overallLevel]}`, color: riskColor[overallLevel], fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 14, letterSpacing: '0.12em', borderRadius: 2 }}>
                 {overallLevel.toUpperCase()}
@@ -191,24 +196,24 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16, marginBottom: 16 }}>
           <div style={{ ...CARD, borderTop: `2px solid ${floodColor}`, padding: isMobile ? '18px 18px' : '20px 24px', boxShadow: '0 1px 6px rgba(18,38,43,0.05)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 14 }}>FLOOD RISK ASSESSMENT</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 14 }}>{t('floodRiskAssessment')}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20 }}>
               <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 40, color: floodColor, lineHeight: 1 }}>{result.floodRiskLevel}</span>
-              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>risk level</span>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('riskLevelLabel')}</span>
             </div>
             <RiskGauge value={result.floodProbability} level={result.floodRiskLevel} />
             <ReliabilityCell accuracy={result.floodAccuracy} />
           </div>
 
           <div style={{ ...CARD, borderTop: `2px solid ${landslideColor}`, padding: isMobile ? '18px 18px' : '20px 24px', boxShadow: '0 1px 6px rgba(18,38,43,0.05)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 14 }}>LANDSLIDE RISK ASSESSMENT</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 14 }}>{t('landslideRiskAssessment')}</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 20 }}>
               <span style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 700, fontSize: 40, color: landslideColor, lineHeight: 1 }}>{result.landslideRiskLevel}</span>
-              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>risk level</span>
+              <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>{t('riskLevelLabel')}</span>
             </div>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.06em' }}>CONFIDENCE</span>
+                <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.06em' }}>{t('confidenceLabel')}</span>
                 <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 18, fontWeight: 600, color: landslideColor }}>{Math.round(result.landslideConfidence * 100)}%</span>
               </div>
               <div style={{ display: 'flex', gap: 2 }}>
@@ -224,42 +229,42 @@ export default function RiskManifestPage({ placeId, navigate }: RiskManifestPage
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.2fr 1fr', gap: 16, marginBottom: 16 }}>
           <div style={{ ...CARD, padding: isMobile ? '18px 18px' : '20px 24px', boxShadow: '0 1px 6px rgba(18,38,43,0.05)' }}>
             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              LIVE WEATHER
+              {t('liveWeather')}
               <span style={{ color: '#7C9A3C', fontSize: 9, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#7C9A3C', display: 'inline-block' }} />LIVE
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#7C9A3C', display: 'inline-block' }} />{t('liveBadge')}
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-              <WeatherCell label="7-Day Rainfall" value={result.rainfall7dayMm.toFixed(1)} unit="mm" />
-              <WeatherCell label="Temperature" value={result.temperatureC !== null ? result.temperatureC.toFixed(1) : '--'} unit="°C" />
-              <WeatherCell label="Wind Speed" value={result.windspeedKmh !== null ? result.windspeedKmh.toFixed(1) : '--'} unit="km/h" />
+              <WeatherCell label={t('rainfallLabel')} value={result.rainfall7dayMm.toFixed(1)} unit="mm" />
+              <WeatherCell label={t('temperatureLabel')} value={result.temperatureC !== null ? result.temperatureC.toFixed(1) : '--'} unit="°C" />
+              <WeatherCell label={t('windSpeedLabel')} value={result.windspeedKmh !== null ? result.windspeedKmh.toFixed(1) : '--'} unit="km/h" />
             </div>
           </div>
 
           <div style={{ ...CARD, padding: isMobile ? '18px 18px' : '20px 24px', boxShadow: '0 1px 6px rgba(18,38,43,0.05)' }}>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 12 }}>TERRAIN FEATURES</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: MUTED, letterSpacing: '0.1em', marginBottom: 12 }}>{t('terrainFeatures')}</div>
             {place.terrainIsEstimated && (
               <div style={{ marginBottom: 12, padding: '6px 10px', background: 'rgba(217,154,43,0.08)', border: '1px solid rgba(217,154,43,0.25)', borderRadius: 2, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 11, color: '#D99A2B', lineHeight: 1.4 }}>
-                Estimated from the {place.district} district average — not a site-specific measurement.
+                {t('estimatedFromPrefix')} {place.district} {t('estimatedFromSuffix')}
               </div>
             )}
-            <TerrainRow label="Elevation" value={`${place.elevation.toFixed(0)} m ASL`} />
-            <TerrainRow label="Avg. Slope" value={`${place.slope.toFixed(1)}°`} />
-            <TerrainRow label="Dist. to Water" value={`${place.distToWaterM.toFixed(0)} m`} />
-            <TerrainRow label="Vegetation Cover" value={`${place.vegetationPct.toFixed(1)}%`} />
-            <TerrainRow label="Built-up Area" value={`${place.builtupPct.toFixed(1)}%`} />
+            <TerrainRow label={t('elevationLabel')} value={`${place.elevation.toFixed(0)} m ASL`} />
+            <TerrainRow label={t('avgSlopeLabel')} value={`${place.slope.toFixed(1)}°`} />
+            <TerrainRow label={t('distToWaterLabel')} value={`${place.distToWaterM.toFixed(0)} m`} />
+            <TerrainRow label={t('vegetationCoverLabel')} value={`${place.vegetationPct.toFixed(1)}%`} />
+            <TerrainRow label={t('builtupAreaLabel')} value={`${place.builtupPct.toFixed(1)}%`} />
           </div>
         </div>
 
         <div style={{ padding: isMobile ? '18px 18px' : '20px 24px', background: 'rgba(31,111,100,0.06)', border: '1px solid rgba(31,111,100,0.2)', borderRadius: 2, display: 'flex', flexDirection: isMobile ? 'column' as const : 'row' as const, alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
-            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64', letterSpacing: '0.1em', marginBottom: 4 }}>DAMAGE ASSESSMENT</div>
+            <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64', letterSpacing: '0.1em', marginBottom: 4 }}>{t('damageAssessment')}</div>
             <div style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: MUTED }}>
-              Upload before/after images to assess damage for {place.name}.
+              {t('uploadDamagePrefix')} {place.name}{t('uploadDamageSuffix')}
             </div>
           </div>
           <button onClick={() => navigate('damage')} style={{ padding: '10px 20px', background: '#1F6F64', border: 'none', borderRadius: 2, cursor: 'pointer', color: '#F2F4EF', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 12, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-            Upload Images →
+            {t('uploadImagesButton')}
           </button>
         </div>
       </div>

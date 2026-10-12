@@ -1,0 +1,43 @@
+import type { Dict } from '../useT';
+
+export const dict: Dict = {
+  en: {
+    riskManifest: 'RISK MANIFEST',
+    gisDashboard: 'GIS DASHBOARD',
+    activeAlerts: 'ACTIVE ALERTS',
+    damWaterLevels: 'DAM WATER LEVELS',
+    shelters: 'SHELTERS',
+    communityReports: 'COMMUNITY REPORTS',
+    analytics: 'ANALYTICS',
+    news: 'NEWS',
+    damageAssessment: 'DAMAGE ASSESSMENT',
+    submitAPlace: 'SUBMIT A PLACE',
+    adminReview: 'ADMIN — REVIEW SUBMISSIONS',
+  },
+  ml: {
+    riskManifest: 'റിസ്ക് മാനിഫെസ്റ്റ്',
+    gisDashboard: 'ജിഐഎസ് ഡാഷ്ബോർഡ്',
+    activeAlerts: 'സജീവ അലേർട്ടുകൾ',
+    damWaterLevels: 'അണക്കെട്ട് ജലനിരപ്പ്',
+    shelters: 'ദുരിതാശ്വാസ ക്യാമ്പുകൾ',
+    communityReports: 'സാമൂഹിക റിപ്പോർട്ടുകൾ',
+    analytics: 'അനലിറ്റിക്സ്',
+    news: 'വാർത്ത',
+    damageAssessment: 'നാശനഷ്ട വിലയിരുത്തൽ',
+    submitAPlace: 'സ്ഥലം ചേർക്കുക',
+    adminReview: 'അഡ്മിൻ — സമർപ്പണങ്ങൾ അവലോകനം ചെയ്യുക',
+  },
+  hi: {
+    riskManifest: 'जोखिम मेनिफ़ेस्ट',
+    gisDashboard: 'जीआईएस डैशबोर्ड',
+    activeAlerts: 'सक्रिय चेतावनियाँ',
+    damWaterLevels: 'बांध जल स्तर',
+    shelters: 'राहत शिविर',
+    communityReports: 'सामुदायिक रिपोर्ट',
+    analytics: 'विश्लेषण',
+    news: 'समाचार',
+    damageAssessment: 'क्षति आकलन',
+    submitAPlace: 'स्थान जोड़ें',
+    adminReview: 'एडमिन — सबमिशन की समीक्षा करें',
+  },
+};

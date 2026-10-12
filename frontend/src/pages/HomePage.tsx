@@ -3,6 +3,8 @@ import { riskColor, type Place } from '../data/mockData';
 import { fetchAllPlaces, fetchRealAlerts } from '../lib/api';
 import { type Page } from '../App';
 import useIsMobile from '../hooks/useIsMobile';
+import { useT } from '../i18n/useT';
+import { dict } from '../i18n/dict/home';
 
 interface HomePageProps {
   navigate: (page: Page, placeId?: number) => void;
@@ -10,15 +12,15 @@ interface HomePageProps {
 
 const MUTED = '#4a5e62';
 
-const typeLabel: Record<string, string> = {
-  gram_panchayat: 'Gram Panchayat',
-  municipality: 'Municipality',
-  municipal_corporation: 'Municipal Corporation',
-  city: 'City',
-  local_area: 'Local Area',
-};
-
 export default function HomePage({ navigate }: HomePageProps) {
+  const t = useT(dict);
+  const typeLabel: Record<string, string> = {
+    gram_panchayat: t('typeGramPanchayat'),
+    municipality: t('typeMunicipality'),
+    municipal_corporation: t('typeMunicipalCorporation'),
+    city: t('typeCity'),
+    local_area: t('typeLocalArea'),
+  };
   const isMobile = useIsMobile();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Place[]>([]);
@@ -105,7 +107,7 @@ export default function HomePage({ navigate }: HomePageProps) {
           color: '#B54A2A', letterSpacing: '0.08em',
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#B54A2A', display: 'inline-block' }} className="animate-pulse-risk" />
-          ACTIVE MONSOON SEASON · {alertsLoading ? 'CHECKING CURRENT ALERTS…' : `${criticalCount} CRITICAL · ${highCount} HIGH ALERTS`}
+          {t('activeMonsoonSeason')} · {alertsLoading ? t('checkingAlerts') : `${criticalCount} ${t('criticalWord')} · ${highCount} ${t('highAlertsWord')}`}
           <span style={{ color: MUTED, marginLeft: 4 }}>{new Date().toLocaleDateString('en-IN', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}</span>
         </div>
 
@@ -115,13 +117,12 @@ export default function HomePage({ navigate }: HomePageProps) {
           fontWeight: 700, color: '#12262B',
           margin: '0 0 16px', lineHeight: 1.05, letterSpacing: '-0.02em',
         }}>
-          Disaster Intelligence<br />
-          <span style={{ color: '#1F6F64' }}>Platform</span> — Kerala
+          {t('heroTitleLine1')}<br />
+          <span style={{ color: '#1F6F64' }}>{t('heroTitleLine2')}</span> {t('heroTitleSuffix')}
         </h1>
 
         <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 16, color: MUTED, margin: '0 0 40px', lineHeight: 1.6, maxWidth: 540, marginLeft: 'auto', marginRight: 'auto' }}>
-          Live flood and landslide risk assessment for Kerala.
-          Search any panchayat, municipality, or city by name.
+          {t('heroSubtitle')}
         </p>
 
         {/* Search box */}
@@ -167,7 +168,7 @@ export default function HomePage({ navigate }: HomePageProps) {
               }
               if (e.key === 'Enter') handleSearch();
             }}
-            placeholder="Search panchayat, municipality, city…"
+            placeholder={t('searchPlaceholder')}
             style={{
               flex: 1, background: 'none', border: 'none', outline: 'none',
               padding: isMobile ? '12px 12px' : '12px 16px',
@@ -189,7 +190,7 @@ export default function HomePage({ navigate }: HomePageProps) {
               height: isMobile ? 44 : 'auto',
             }}
           >
-            {loading ? '…' : !placesReady ? 'Loading…' : 'Query Risk'}
+            {loading ? '…' : !placesReady ? t('loadingButton') : t('queryRiskButton')}
           </button>
         </div>
 
@@ -229,18 +230,18 @@ export default function HomePage({ navigate }: HomePageProps) {
 
         {!placesReady && !loadError && (
           <div style={{ maxWidth: 900, margin: '12px auto 0', padding: '10px 16px', background: 'rgba(31,111,100,0.08)', border: '1px solid rgba(31,111,100,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: '#1F6F64', textAlign: 'center' }}>
-            Loading places — this can take a little longer than usual right after a quiet period. Search will be enabled once it's ready.
+            {t('loadingPlacesNotice')}
           </div>
         )}
 
         {loadError && (
           <div style={{ maxWidth: 900, margin: '12px auto 0', padding: '14px 16px', background: 'rgba(181,74,42,0.08)', border: '1px solid rgba(181,74,42,0.3)', borderRadius: 2, fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 13, color: '#B54A2A', textAlign: 'center' }}>
-            We're having trouble loading places right now.
+            {t('loadErrorNotice')}
             <button
-              onClick={() => setRetryTick(t => t + 1)}
+              onClick={() => setRetryTick(n => n + 1)}
               style={{ marginLeft: 10, padding: '4px 12px', background: '#B54A2A', border: 'none', borderRadius: 2, color: '#ffffff', fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, cursor: 'pointer', letterSpacing: '0.04em' }}
             >
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
@@ -252,11 +253,11 @@ export default function HomePage({ navigate }: HomePageProps) {
         <div style={{ maxWidth: 900, margin: '0 auto', padding: `0 ${isMobile ? 16 : 24}px 48px` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, paddingBottom: 10, borderBottom: '1px solid rgba(18,38,43,0.08)', flexWrap: 'wrap' as const, gap: 8 }}>
             <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.08em' }}>
-              {results.length > 0 ? `${results.length} PLACES FOUND` : 'NO RESULTS'}
+              {results.length > 0 ? `${results.length} ${t('placesFound')}` : t('noResults')}
             </span>
             {results.length === 0 && (
               <button onClick={() => navigate('submit')} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#D99A2B', background: 'none', border: '1px solid rgba(217,154,43,0.4)', padding: '4px 10px', borderRadius: 2, cursor: 'pointer', letterSpacing: '0.06em' }}>
-                + SUBMIT MISSING PLACE
+                {t('submitMissingPlace')}
               </button>
             )}
           </div>
@@ -297,7 +298,7 @@ export default function HomePage({ navigate }: HomePageProps) {
                         {risk.toUpperCase()}
                       </span>
                     ) : (
-                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64' }}>QUERY →</span>
+                      <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: '#1F6F64' }}>{t('queryArrow')}</span>
                     )}
                   </button>
                 );
@@ -306,12 +307,12 @@ export default function HomePage({ navigate }: HomePageProps) {
           ) : (
             <div style={{ padding: '48px 24px', textAlign: 'center', background: '#ffffff', border: '1px solid rgba(18,38,43,0.08)', borderRadius: 2 }}>
               <div style={{ fontSize: 28, marginBottom: 12, opacity: 0.2, color: '#12262B' }}>◈</div>
-              <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B', marginBottom: 8 }}>No matching place found</div>
+              <div style={{ fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 16, color: '#12262B', marginBottom: 8 }}>{t('noMatchingPlace')}</div>
               <p style={{ fontFamily: 'IBM Plex Sans, sans-serif', fontSize: 14, color: MUTED, marginBottom: 20 }}>
-                We couldn't find "{query}" in our records. You can submit it for review.
+                {t('notFoundPrefix')} "{query}" {t('notFoundSuffix')}
               </p>
               <button onClick={() => navigate('submit')} style={{ padding: '10px 24px', background: 'rgba(217,154,43,0.1)', border: '1px solid rgba(217,154,43,0.5)', borderRadius: 3, cursor: 'pointer', color: '#D99A2B', fontFamily: 'Space Grotesk, sans-serif', fontWeight: 600, fontSize: 13 }}>
-                Submit "{query}" for addition
+                {t('submitPrefix')} "{query}" {t('submitSuffix')}
               </button>
             </div>
           )}
@@ -322,18 +323,18 @@ export default function HomePage({ navigate }: HomePageProps) {
       {!searched && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: `0 ${isMobile ? 16 : 24}px 64px` }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.1em' }}>ACTIVE BULLETINS</span>
-            <button onClick={() => navigate('alerts')} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer' }}>VIEW ALL →</button>
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: MUTED, letterSpacing: '0.1em' }}>{t('activeBulletins')}</span>
+            <button onClick={() => navigate('alerts')} style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 11, color: '#1F6F64', background: 'none', border: 'none', cursor: 'pointer' }}>{t('viewAll')}</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {alertsLoading && (
               <div style={{ padding: '14px 16px', background: '#ffffff', border: '1px solid rgba(18,38,43,0.07)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
-                Scanning current conditions…
+                {t('scanningConditions')}
               </div>
             )}
             {!alertsLoading && alerts.length === 0 && (
               <div style={{ padding: '14px 16px', background: '#ffffff', border: '1px solid rgba(18,38,43,0.07)', borderRadius: 2, fontFamily: 'IBM Plex Mono, monospace', fontSize: 12, color: MUTED }}>
-                No active bulletins right now.
+                {t('noActiveBulletins')}
               </div>
             )}
             {!alertsLoading && alerts.slice(0, 4).map(alert => (

@@ -14,6 +14,8 @@ import DamageAssessmentPage from './pages/DamageAssessmentPage';
 import SubmitPlacePage from './pages/SubmitPlacePage';
 import AdminReviewPage from './pages/AdminReviewPage';
 import { loginWithGoogle, logout, isLoggedIn as checkIsLoggedIn, isAdmin as checkIsAdmin, adminLogout, fetchNews } from './lib/api';
+import { useT } from './i18n/useT';
+import { dict as appDict } from './i18n/dict/app';
 
 // NOTE: 'subscribe'/SubscribePage (SMS/WhatsApp alert signup) was wired in as a stub but never
 // actually built -- removed from here rather than shipping a fake page. That's a real,
@@ -45,6 +47,7 @@ function SectionDivider({ label }: { label: string }) {
 
 export default function App() {
   const isMobile = useIsMobile(900); // must match the breakpoint Nav.tsx uses internally
+  const t = useT(appDict);
   const [activePlaceId, setActivePlaceId] = useState<number>(1);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -121,52 +124,52 @@ export default function App() {
         <HomePage navigate={navigate} />
       </div>
 
-      <SectionDivider label="RISK MANIFEST" />
+      <SectionDivider label={t('riskManifest')} />
       <div ref={refs.manifest} style={{ scrollMarginTop: 16 }}>
         <RiskManifestPage placeId={activePlaceId} navigate={navigate} />
       </div>
 
-      <SectionDivider label="GIS DASHBOARD" />
+      <SectionDivider label={t('gisDashboard')} />
       <div ref={refs.dashboard} style={{ scrollMarginTop: 16 }}>
         <DashboardPage navigate={navigate} />
       </div>
 
-      <SectionDivider label="ACTIVE ALERTS" />
+      <SectionDivider label={t('activeAlerts')} />
       <div ref={refs.alerts} style={{ scrollMarginTop: 16 }}>
         <AlertsPage navigate={navigate} />
       </div>
 
-      <SectionDivider label="DAM WATER LEVELS" />
+      <SectionDivider label={t('damWaterLevels')} />
       <div ref={refs.dams} style={{ scrollMarginTop: 16 }}>
         <DamsPage />
       </div>
 
-      <SectionDivider label="SHELTERS" />
+      <SectionDivider label={t('shelters')} />
       <div ref={refs.shelters} style={{ scrollMarginTop: 16 }}>
         <SheltersPage />
       </div>
 
-      <SectionDivider label="COMMUNITY REPORTS" />
+      <SectionDivider label={t('communityReports')} />
       <div ref={refs.incidents} style={{ scrollMarginTop: 16 }}>
         <IncidentsPage />
       </div>
 
-      <SectionDivider label="ANALYTICS" />
+      <SectionDivider label={t('analytics')} />
       <div ref={refs.analytics} style={{ scrollMarginTop: 16 }}>
         <AnalyticsPage />
       </div>
 
-      <SectionDivider label="NEWS" />
+      <SectionDivider label={t('news')} />
       <div ref={refs.news} style={{ scrollMarginTop: 16 }}>
         <NewsPage />
       </div>
 
-      <SectionDivider label="DAMAGE ASSESSMENT" />
+      <SectionDivider label={t('damageAssessment')} />
       <div ref={refs.damage} style={{ scrollMarginTop: 16 }}>
         <DamageAssessmentPage />
       </div>
 
-      <SectionDivider label="SUBMIT A PLACE" />
+      <SectionDivider label={t('submitAPlace')} />
       <div ref={refs.submit} style={{ scrollMarginTop: 16 }}>
         <SubmitPlacePage isLoggedIn={isLoggedIn} />
       </div>
@@ -175,7 +178,7 @@ export default function App() {
           so the review functionality and its data never load into a regular visitor's session. */}
       {isAdmin && (
         <>
-          <SectionDivider label="ADMIN — REVIEW SUBMISSIONS" />
+          <SectionDivider label={t('adminReview')} />
           <div ref={refs.admin} style={{ scrollMarginTop: 16 }}>
             <AdminReviewPage />
           </div>
