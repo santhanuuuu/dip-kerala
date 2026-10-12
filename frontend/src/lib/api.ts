@@ -316,6 +316,29 @@ export async function fetchDamageHistory(placeId: number): Promise<DamageRecord[
   }));
 }
 
+export interface RecentDamageRecord extends DamageRecord {
+  placeId: number;
+}
+
+/** Statewide feed, newest first, across every place -- for showing "recent disaster damage"
+ * the moment someone opens the Damage Assessment page, before they've picked a place
+ * themselves. Mirrors fetchAlerts() for the home page bulletin feed. The /recent endpoint
+ * already joins place name/district server-side, so no second fetchAllPlaces() round trip. */
+export async function fetchRecentDamageAssessments(limit = 10): Promise<RecentDamageRecord[]> {
+  const res = await fetch(`${API_BASE}/api/damage-assessment/recent?limit=${limit}`);
+  if (!res.ok) return [];
+  const d = await res.json();
+  return (d.results || []).map((r: any) => ({
+    id: r.id,
+    placeId: r.place_id,
+    placeName: r.place_name || 'Unknown',
+    district: r.district || '',
+    damageClass: r.damage_class,
+    confidence: r.confidence,
+    eventDate: r.event_date || (r.created_at ? r.created_at.slice(0, 10) : 'unknown date'),
+  }));
+}
+
 // --- Analytics: both of these are REAL computed/aggregated data, not sample numbers.
 // District ranking is computed live from the trained models; daily history reads the
 // actual risk_queries table and will be sparse on a fresh deployment -- that's honest,

@@ -169,3 +169,33 @@ def get_damage_history(place_id: int, db: Session = Depends(get_db)):
             for r in records
         ]
     }
+
+
+@router.get("/recent")
+def get_recent_damage_assessments(limit: int = 15, db: Session = Depends(get_db)):
+    """Statewide feed, newest first -- every assessment ever run, across every place, joined
+    with its place's name/district so the frontend can show a bulletin-style list without a
+    place selected first (mirrors how /api/alerts works for the home page bulletin feed)."""
+    limit = max(1, min(limit, 50))
+    rows = (
+        db.query(DamageAssessment, Place)
+        .join(Place, Place.id == DamageAssessment.place_id)
+        .order_by(DamageAssessment.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "results": [
+            {
+                "id": r.id,
+                "place_id": p.id,
+                "place_name": p.name,
+                "district": p.district,
+                "damage_class": r.damage_class,
+                "confidence": r.confidence,
+                "event_date": r.event_date,
+                "created_at": r.created_at,
+            }
+            for r, p in rows
+        ]
+    }
